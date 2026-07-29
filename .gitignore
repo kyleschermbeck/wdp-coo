@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# WDP — local data & secrets (SQLite DBs contain API keys)
+data/
+*.db
+
+# misc local files
+.Rhistory
+.claude/
+wdp-coo.db
+wdp.db
