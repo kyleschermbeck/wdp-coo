@@ -436,13 +436,13 @@ export default function AllTasksPage() {
         task={drawerTask}
         onClose={() => setDrawerTask(null)}
         onUpdate={updated => { setTasks(prev => prev.map(t => t.id === updated.id ? updated : t)); setDrawerTask(updated) }}
-        onDelete={id => { setTasks(prev => prev.filter(t => t.id !== id)); setDrawerTask(null) }}
+        onDelete={async id => { await fetch(`/api/tasks/${id}`, { method: 'DELETE' }); setTasks(prev => prev.filter(t => t.id !== id)); setDrawerTask(null) }}
       />
       <SubtaskDetailDrawer
         subtask={drawerSubtask}
         onClose={() => setDrawerSubtask(null)}
         onUpdate={updated => { setSubtasks(prev => prev.map(s => s.id === updated.id ? updated : s)); setDrawerSubtask(updated) }}
-        onDelete={id => { setSubtasks(prev => prev.filter(s => s.id !== id)); setDrawerSubtask(null) }}
+        onDelete={async id => { await fetch(`/api/subtasks/${id}`, { method: 'DELETE' }); setSubtasks(prev => prev.filter(s => s.id !== id)); setDrawerSubtask(null) }}
       />
     </>
   )

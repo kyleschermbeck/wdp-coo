@@ -299,11 +299,21 @@ export default function ContactsPage() {
       fetch('/api/shopify/customers').then(r => r.json()),
     ])
     if (shopRes.status === 'fulfilled') setShopifyConnected((shopRes.value as { connected: boolean }).connected)
-    if (custRes.status === 'fulfilled' && Array.isArray(custRes.value)) setCustomers(custRes.value)
+    const loaded: ShopifyCustomer[] = custRes.status === 'fulfilled' && Array.isArray(custRes.value) ? custRes.value : []
+    setCustomers(loaded)
     setLoading(false)
+    return loaded
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load().then(loaded => {
+      const param = new URLSearchParams(window.location.search).get('customer')
+      if (param) {
+        const found = loaded.find(c => c.shopify_id === param)
+        if (found) setSelected(found)
+      }
+    })
+  }, [load])
 
   async function sync() {
     setSyncing(true)

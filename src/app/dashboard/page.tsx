@@ -981,7 +981,11 @@ export default function DashboardPage() {
         task={drawerTask}
         onClose={() => setDrawerTask(null)}
         onUpdate={(updated) => setDrawerTask(updated)}
-        onDelete={() => setDrawerTask(null)}
+        onDelete={async (id) => {
+          await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+          setTasks(prev => prev.filter(t => t.id !== id))
+          setDrawerTask(null)
+        }}
         onOpenSubtask={(s) => { setDrawerTask(null); setDrawerSubtask(s) }}
       />
 
@@ -989,7 +993,11 @@ export default function DashboardPage() {
         subtask={drawerSubtask}
         onClose={() => setDrawerSubtask(null)}
         onUpdate={(updated) => setDrawerSubtask(updated)}
-        onDelete={() => setDrawerSubtask(null)}
+        onDelete={async (id) => {
+          await fetch(`/api/subtasks/${id}`, { method: 'DELETE' })
+          setDueSubtasks(prev => prev.filter(s => s.id !== id))
+          setDrawerSubtask(null)
+        }}
         onOpenParentTask={(taskId) => { setDrawerSubtask(null); openTaskInDrawer(taskId) }}
       />
     </div>

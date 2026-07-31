@@ -4872,6 +4872,11 @@ function ContentStrategyTab() {
   const [newCard, setNewCard] = useState({ format: 'Reel' as ContentIdea['format'], title: '', hook: '', caption_concept: '', why: '' })
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [pendingIdea, setPendingIdea] = useState<ContentIdea | null>(null)
+  const [pendingTitle, setPendingTitle] = useState('')
+  const [pendingDesc, setPendingDesc] = useState('')
+  const [creatingTask, setCreatingTask] = useState(false)
+  const [marketingProjectId, setMarketingProjectId] = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/marketing/content-ideas')
@@ -4882,6 +4887,13 @@ function ContentStrategyTab() {
         if (data.ideas?.length) setIdeas(data.ideas)
         if (data.last_generated) setLastGenerated(data.last_generated)
         if (data.ratings) setRatings(data.ratings)
+      })
+      .catch(() => {})
+    fetch('/api/projects')
+      .then(r => r.json())
+      .then((projects: { id: number; name: string }[]) => {
+        const p = projects.find(p => p.name === 'Marketing Tasks')
+        if (p) setMarketingProjectId(p.id)
       })
       .catch(() => {})
   }, [])
@@ -4946,6 +4958,10 @@ function ContentStrategyTab() {
       const merged = [...keptIdeas, ...newIdeas.filter(i => !keptIds.has(i.id))]
       setIdeas(merged)
       if (data.last_generated) setLastGenerated(data.last_generated)
+      // Clear ratings for replaced cards so old thumbs/comments don't bleed onto new ones
+      const nextRatings = Object.fromEntries(Object.entries(ratings).filter(([id]) => keptIds.has(id)))
+      setRatings(nextRatings)
+      fetch('/api/marketing/content-ideas', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ratings: nextRatings }) }).catch(() => {})
     } catch {
       setError('Failed to generate ideas — check your API key.')
     } finally {
@@ -5276,6 +5292,30 @@ function ContentStrategyTab() {
                       )}
                     </div>
                   </div>
+                  {/* Make Task button */}
+                  <button
+                    onClick={() => {
+                      const desc = [
+                        `Format: ${idea.format}`,
+                        `Hook: ${idea.hook}`,
+                        idea.caption_concept ? `Caption direction: ${idea.caption_concept}` : null,
+                        `Why: ${idea.why}`,
+                      ].filter(Boolean).join('\n')
+                      setPendingIdea(idea)
+                      setPendingTitle(idea.title)
+                      setPendingDesc(desc)
+                    }}
+                    className="mt-2 w-full text-[10px] font-semibold py-1 rounded-md transition-all cursor-pointer"
+                    style={{
+                      fontFamily: FONT,
+                      background: 'rgba(44,44,44,0.07)',
+                      color: 'rgba(44,44,44,0.5)',
+                      border: '1px solid rgba(44,44,44,0.12)',
+                    }}
+                  >
+                    + Make Task
+                  </button>
+
                   {expandedFeedback === idea.id && (
                     <textarea
                       value={ratings[idea.id]?.feedback ?? ''}
@@ -5299,6 +5339,102 @@ function ContentStrategyTab() {
           </div>
         )}
       </div>
+
+      {/* Task Review Sidebar */}
+      {pendingIdea && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setPendingIdea(null)}
+          />
+          <div className="fixed right-0 top-0 bottom-0 z-50 w-[400px] bg-white shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-mushroom/40 flex items-center justify-between">
+              <p className="text-sm font-semibold text-ink-dark" style={{ fontFamily: FONT }}>Review Task</p>
+              <button
+                onClick={() => setPendingIdea(null)}
+                className="text-ink/40 hover:text-ink transition-colors cursor-pointer"
+                style={{ fontSize: 20, lineHeight: 1, background: 'none', border: 'none', padding: 0 }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-widest text-ink/50 mb-1.5" style={{ fontFamily: FONT }}>
+                  Task Title
+                </label>
+                <input
+                  value={pendingTitle}
+                  onChange={e => setPendingTitle(e.target.value)}
+                  className="w-full text-sm px-3 py-2 rounded-lg border border-mushroom/50 bg-oatmilk/40 text-ink-dark outline-none focus:ring-1 focus:ring-ink/20"
+                  style={{ fontFamily: FONT }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-widest text-ink/50 mb-1.5" style={{ fontFamily: FONT }}>
+                  Description
+                </label>
+                <textarea
+                  value={pendingDesc}
+                  onChange={e => setPendingDesc(e.target.value)}
+                  rows={8}
+                  className="w-full text-sm px-3 py-2 rounded-lg border border-mushroom/50 bg-oatmilk/40 text-ink-dark outline-none focus:ring-1 focus:ring-ink/20 resize-none leading-relaxed"
+                  style={{ fontFamily: FONT }}
+                />
+              </div>
+
+              <div className="pt-1">
+                <p className="text-[10px] text-ink/40" style={{ fontFamily: FONT }}>
+                  Format: <span className="font-medium text-ink/60">{pendingIdea.format}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-mushroom/40 flex gap-3">
+              <button
+                onClick={() => setPendingIdea(null)}
+                className="flex-1 text-sm font-semibold py-2 rounded-lg border border-mushroom/60 text-ink hover:bg-oatmilk transition-colors cursor-pointer"
+                style={{ fontFamily: FONT }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={creatingTask || !pendingTitle.trim()}
+                onClick={async () => {
+                  if (!pendingIdea) return
+                  setCreatingTask(true)
+                  try {
+                    await fetch('/api/tasks', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ title: pendingTitle.trim(), notes: pendingDesc, status: 'todo', priority: 'medium', project_id: marketingProjectId }),
+                    })
+                    const nextIdeas = ideas.filter(i => i.id !== pendingIdea.id)
+                    setIdeas(nextIdeas)
+                    fetch('/api/marketing/content-ideas', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ ideas: nextIdeas }),
+                    }).catch(() => {})
+                    setPendingIdea(null)
+                  } finally {
+                    setCreatingTask(false)
+                  }
+                }}
+                className="flex-1 text-sm font-semibold py-2 rounded-lg bg-ink-dark text-cream hover:bg-ink transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                style={{ fontFamily: FONT }}
+              >
+                {creatingTask ? 'Creating…' : 'Create Task'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

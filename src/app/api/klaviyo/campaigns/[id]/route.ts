@@ -17,7 +17,7 @@ async function fetchCampaignMetric(
     method: 'POST',
     headers: {
       'Authorization': `Klaviyo-API-Key ${apiKey}`,
-      'revision': '2024-02-15',
+      'revision': '2024-10-15',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -30,8 +30,8 @@ async function fetchCampaignMetric(
           filter: [
             `greater-or-equal(datetime,${fmt(start)})`,
             `less-than(datetime,${fmt(end)})`,
+            `equals($message,"${campaignId}")`,
           ],
-          by: ['$campaign'],
           page_size: 500,
         },
       },
@@ -39,16 +39,13 @@ async function fetchCampaignMetric(
   })
   if (!res.ok) return 0
   const data = await res.json() as {
-    data: { attributes: { data: Array<{ dimensions: string[]; measurements: Record<string, number[]> }> } }
+    data: { attributes: { data: Array<{ measurements: Record<string, number[]> }> } }
   }
-  // Group-by approach: find rows attributed to this specific campaign
   const rows = data.data?.attributes?.data ?? []
   let total = 0
   for (const row of rows) {
-    if (row.dimensions?.[0] === campaignId) {
-      const vals = row.measurements[measurement] ?? []
-      total += vals.reduce((s, v) => s + v, 0)
-    }
+    const vals = row.measurements[measurement] ?? []
+    total += vals.reduce((s, v) => s + v, 0)
   }
   return total
 }

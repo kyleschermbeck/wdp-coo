@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Plus, LayoutGrid, List, ArrowLeft, Trash2, ExternalLink, Check, GripVertical, Calendar } from 'lucide-react'
 import { Project, Task, Subtask } from '@/lib/types'
 import { ProjectCard } from '@/components/projects/ProjectCard'
@@ -504,6 +505,11 @@ const STATUS_FILTERS = [
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function WorkTrackingPage() {
+  return <Suspense><WorkTrackingInner /></Suspense>
+}
+
+function WorkTrackingInner() {
+  const searchParams = useSearchParams()
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [subtasks, setSubtasks] = useState<Subtask[]>([])
@@ -572,14 +578,16 @@ export default function WorkTrackingPage() {
       setTasks(loadedTasks)
       setSubtasks(Array.isArray(s) ? s : [])
       setLoading(false)
-      // Auto-open task from ?task=N URL param (e.g. when clicking from dashboard)
-      const taskParam = new URLSearchParams(window.location.search).get('task')
-      if (taskParam) {
-        const found = loadedTasks.find(task => task.id === Number(taskParam))
-        if (found) setDrawerTask(found)
-      }
     })
   }, [])
+
+  // Open task drawer when ?task=ID param is present or changes
+  useEffect(() => {
+    const taskId = searchParams.get('task')
+    if (!taskId || tasks.length === 0) return
+    const found = tasks.find(t => t.id === Number(taskId))
+    if (found) setDrawerTask(found)
+  }, [searchParams, tasks])
 
   // Sync edit fields + reset task filters/order when selected project changes
   useEffect(() => {
@@ -679,7 +687,8 @@ export default function WorkTrackingPage() {
     setDrawerTask(updated)
   }, [])
 
-  const handleDrawerDelete = useCallback((id: number) => {
+  const handleDrawerDelete = useCallback(async (id: number) => {
+    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
     setTasks(prev => prev.filter(t => t.id !== id))
     setTaskOrder(prev => prev.filter(x => x !== id))
     setDrawerTask(null)
@@ -1378,7 +1387,7 @@ export default function WorkTrackingPage() {
         subtask={drawerSubtask}
         onClose={() => setDrawerSubtask(null)}
         onUpdate={s => setSubtasks(prev => prev.map(sub => sub.id === s.id ? s : sub))}
-        onDelete={id => { setSubtasks(prev => prev.filter(s => s.id !== id)); setDrawerSubtask(null) }}
+        onDelete={async id => { await fetch(`/api/subtasks/${id}`, { method: 'DELETE' }); setSubtasks(prev => prev.filter(s => s.id !== id)); setDrawerSubtask(null) }}
         onOpenParentTask={taskId => {
           setDrawerSubtask(null)
           const t = tasks.find(t => t.id === taskId)

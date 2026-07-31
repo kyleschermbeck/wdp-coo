@@ -16,6 +16,7 @@ import {
   BarChart2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { GlobalSearch } from './GlobalSearch'
 
 const nav = [
   {
@@ -102,6 +103,11 @@ export function Sidebar() {
           className="w-1/2 h-auto"
           priority
         />
+      </div>
+
+      {/* Search */}
+      <div className="px-3 py-2 border-b border-mushroom">
+        <GlobalSearch />
       </div>
 
       {/* Navigation */}
