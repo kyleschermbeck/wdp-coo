@@ -1183,26 +1183,26 @@ export default function SettingsPage() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: CREAM, overflow: 'hidden' }}>
-      <div style={{ padding: '28px 32px 0', flexShrink: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+      <div style={{ padding: 'clamp(28px,4vw,44px) clamp(24px,4vw,44px) 0', flexShrink: 0, maxWidth: 1100, width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
-            <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: INK_LIGHT, margin: 0 }}>Operations</p>
-            <h1 style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 600, color: INK, margin: '4px 0 0' }}>Settings</h1>
+            <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 6px' }}>Operations</p>
+            <h1 style={{ fontFamily: SERIF, fontSize: 'clamp(32px,4vw,44px)', fontWeight: 700, color: '#2C2C2C', margin: 0, lineHeight: 1.04 }}>Settings</h1>
           </div>
           {saveState === 'saving' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: OATMILK, border: BORDER }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: OATMILK, border: BORDER, marginTop: 8 }}>
               <RefreshCw size={13} color={INK_LIGHT} style={{ animation: 'spin 1s linear infinite' }} />
               <span style={{ fontFamily: FONT, fontSize: 12.5, color: INK_LIGHT }}>Saving…</span>
             </div>
           )}
           {saveState === 'saved' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: '#E8F5E9', border: '1px solid #C8E6C9' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: '#E8F5E9', border: '1px solid #C8E6C9', marginTop: 8 }}>
               <CheckCircle size={13} color="#2E7D32" />
               <span style={{ fontFamily: FONT, fontSize: 12.5, color: '#2E7D32', fontWeight: 600 }}>Saved</span>
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 20, borderBottom: '1px solid #D8D2C6' }}>
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #D8D2C6' }}>
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{
               fontFamily: FONT, fontSize: 13.5, fontWeight: 600,
@@ -1217,7 +1217,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px 40px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 'clamp(20px,3vw,32px) clamp(24px,4vw,44px) 60px', maxWidth: 1100, width: '100%' }}>
         {activeTab === 'Appearance'       && <AppearanceTab       settings={settings} onSave={handleSave} />}
         {activeTab === 'Business Profile' && <BusinessProfileTab  settings={settings} onSave={handleSave} />}
         {activeTab === 'Agents'           && <AgentsTab           settings={settings} onSave={handleSave} />}

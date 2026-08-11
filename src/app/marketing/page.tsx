@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DetailDrawer } from '@/components/ui/DetailDrawer'
+import { StatusRail } from '@/components/ui/StatusRail'
 import {
   format,
   addMonths,
@@ -3310,7 +3312,8 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
   const [gaConnected, setGaConnected] = useState<boolean | null>(null)
   const [gaMetrics, setGaMetrics] = useState<ChannelMetric[] | null>(null)
   const [gaSyncing, setGaSyncing] = useState(false)
-  const [expandedAnalytics, setExpandedAnalytics] = useState(false)
+  type ChannelDrawer = 'instagram' | 'meta_ads' | 'messaging' | 'google_analytics' | null
+  const [channelDrawer, setChannelDrawer] = useState<ChannelDrawer>(null)
 
 
   function loadGaData() {
@@ -3465,10 +3468,26 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
     Promise.all(syncs).then(() => onSyncDone?.())
   }, [syncTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function ChannelCard({ name, color, connected, metrics, onSync, syncing }: { name: string; color: string; connected: boolean | null; metrics: ChannelMetric[] | null; onSync?: () => void; syncing?: boolean }) {
+  function ChannelCard({ name, color, connected, metrics, onSync, syncing, onClick }: { name: string; color: string; connected: boolean | null; metrics: ChannelMetric[] | null; onSync?: () => void; syncing?: boolean; onClick?: () => void }) {
+    const [hovered, setHovered] = useState(false)
     const isLoading = connected === null
+    const isClickable = !!onClick && connected === true
+
     return (
-      <div style={{ background: '#fff', border: BORDER, borderRadius: 10, overflow: 'hidden' }}>
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={isClickable ? onClick : undefined}
+        style={{
+          background: '#fff',
+          border: hovered && isClickable ? `1px solid rgba(194,122,84,0.6)` : BORDER,
+          borderRadius: 10,
+          overflow: 'hidden',
+          cursor: isClickable ? 'pointer' : 'default',
+          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+          boxShadow: hovered && isClickable ? '0 3px 14px rgba(44,44,44,0.08)' : 'none',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: connected ? BORDER : 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: color }} />
@@ -3477,7 +3496,7 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {connected && onSync && (
               <button
-                onClick={onSync}
+                onClick={e => { e.stopPropagation(); onSync() }}
                 disabled={syncing}
                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: syncing ? INK_LIGHT : INK_LIGHT, background: OATMILK, border: BORDER, padding: '3px 8px', borderRadius: 5, cursor: syncing ? 'default' : 'pointer', opacity: syncing ? 0.6 : 1 }}
               >
@@ -3510,6 +3529,22 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
           </div>
         )}
         {connected && !metrics && <div style={{ padding: '14px 18px', fontFamily: FONT, fontSize: 13, color: INK_LIGHT }}>Loading…</div>}
+        {/* Drill-in hint */}
+        {isClickable && metrics && (
+          <div style={{
+            padding: '8px 18px',
+            borderTop: BORDER,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 4,
+            opacity: hovered ? 1 : 0.45,
+            transition: 'opacity 0.15s ease',
+          }}>
+            <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', color: '#C27A54' }}>Full analytics</span>
+            <span style={{ fontSize: 10, color: '#C27A54' }}>→</span>
+          </div>
+        )}
       </div>
     )
   }
@@ -3871,16 +3906,36 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
     )
   }
 
+  // Build disconnected channel list for exception rail
+  const disconnectedChannels: { label: string; key: ChannelDrawer }[] = [
+    igConnected === false        ? { label: 'Instagram',        key: 'instagram'        } : null,
+    metaConnected === false      ? { label: 'Meta Ads',         key: 'meta_ads'         } : null,
+    messagingConnected === false  ? { label: 'Email/Klaviyo',    key: 'messaging'        } : null,
+    gaConnected === false         ? { label: 'Google Analytics', key: 'google_analytics' } : null,
+  ].filter(Boolean) as { label: string; key: ChannelDrawer }[]
+
   return (
     <div className="space-y-6">
+      {/* Disconnected channels exception rail */}
+      {disconnectedChannels.length > 0 && (
+        <StatusRail
+          severity="info"
+          message={`${disconnectedChannels.length} channel${disconnectedChannels.length > 1 ? 's' : ''} not connected`}
+          items={disconnectedChannels.map(c => ({
+            label: c.label,
+            onClick: () => setChannelDrawer(c.key),
+          }))}
+        />
+      )}
+
       {/* Channel performance grid */}
       <div>
         <h2 className="text-xs font-semibold uppercase tracking-widest text-ink mb-4" style={{ fontFamily: FONT, letterSpacing: '0.12em' }}>
           Channel Performance
         </h2>
         <div className="grid grid-cols-2 gap-4">
-          <ChannelCard name="Instagram" color="#E1306C" connected={igConnected} metrics={igMetrics} onSync={loadIgData} syncing={igSyncing} />
-          <ChannelCard name="Meta Ads" color="#1877F2" connected={metaConnected} metrics={metaMetrics} onSync={loadMetaData} syncing={metaSyncing} />
+          <ChannelCard name="Instagram" color="#E1306C" connected={igConnected} metrics={igMetrics} onSync={loadIgData} syncing={igSyncing} onClick={() => setChannelDrawer('instagram')} />
+          <ChannelCard name="Meta Ads" color="#1877F2" connected={metaConnected} metrics={metaMetrics} onSync={loadMetaData} syncing={metaSyncing} onClick={() => setChannelDrawer('meta_ads')} />
           <ChannelCard
             name="Messaging"
             color="#C27A54"
@@ -3893,29 +3948,52 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
             ] : null}
             onSync={loadKlaviyoData}
             syncing={klaviyoSyncing}
+            onClick={() => setChannelDrawer('messaging')}
           />
-          <ChannelCard name="Google Analytics" color="#E37400" connected={gaConnected} metrics={gaMetrics} onSync={loadGaData} syncing={gaSyncing} />
+          <ChannelCard name="Google Analytics" color="#E37400" connected={gaConnected} metrics={gaMetrics} onSync={loadGaData} syncing={gaSyncing} onClick={() => setChannelDrawer('google_analytics')} />
         </div>
       </div>
 
-      {/* Full analytics — expandable */}
-      <div>
-        <button
-          onClick={() => setExpandedAnalytics(v => !v)}
-          className="w-full flex items-center justify-between px-5 py-3.5 bg-white rounded-xl border border-mushroom/50 hover:bg-oatmilk/40 transition-colors cursor-pointer"
-          style={{ fontFamily: FONT }}
-        >
-          <span className="text-sm font-semibold text-ink-dark">Full Analytics</span>
-          <span className="text-xs font-semibold text-ink/40">{expandedAnalytics ? '\u25b2 Collapse' : '\u25bc Expand'}</span>
-        </button>
-        {expandedAnalytics && (
-          <div className="mt-4 space-y-4">
-            <MessagingSection />
-            <MetaAdsCard />
-            <GoogleAnalyticsCard />
-          </div>
-        )}
-      </div>
+      {/* Channel analytics drawers */}
+      <DetailDrawer
+        open={channelDrawer === 'instagram'}
+        onClose={() => setChannelDrawer(null)}
+        title="Instagram"
+        subtitle="Post, story, and reel performance"
+        width={680}
+      >
+        <InstagramCard />
+      </DetailDrawer>
+
+      <DetailDrawer
+        open={channelDrawer === 'meta_ads'}
+        onClose={() => setChannelDrawer(null)}
+        title="Meta Ads"
+        subtitle="Ad spend, ROAS, and campaign performance"
+        width={680}
+      >
+        <MetaAdsCard />
+      </DetailDrawer>
+
+      <DetailDrawer
+        open={channelDrawer === 'messaging'}
+        onClose={() => setChannelDrawer(null)}
+        title="Email & Messaging"
+        subtitle="Klaviyo flows, campaigns, and engagement"
+        width={700}
+      >
+        <MessagingSection />
+      </DetailDrawer>
+
+      <DetailDrawer
+        open={channelDrawer === 'google_analytics'}
+        onClose={() => setChannelDrawer(null)}
+        title="Google Analytics"
+        subtitle="Sessions, sources, and site performance"
+        width={680}
+      >
+        <GoogleAnalyticsCard />
+      </DetailDrawer>
 
       {/* Upcoming content */}
       <div>

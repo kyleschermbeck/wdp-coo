@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   LayoutGrid,
@@ -28,6 +29,7 @@ const nav = [
     color: 'terracotta',
     activeColor: 'bg-terracotta-light text-ink-dark',
     dotColor: 'bg-terracotta',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Work Tracking',
@@ -36,6 +38,7 @@ const nav = [
     color: 'sage',
     activeColor: 'bg-sage-light text-ink-dark',
     dotColor: 'bg-sage',
+    badgeKey: 'tasks' as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Recipe Lab',
@@ -44,6 +47,7 @@ const nav = [
     color: 'terracotta',
     activeColor: 'bg-terracotta-light text-ink-dark',
     dotColor: 'bg-terracotta',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Knowledge Base',
@@ -52,6 +56,7 @@ const nav = [
     color: 'blueberry',
     activeColor: 'bg-blueberry-light text-ink-dark',
     dotColor: 'bg-blueberry',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Financials',
@@ -60,6 +65,7 @@ const nav = [
     color: 'thyme',
     activeColor: 'bg-thyme-light text-ink-dark',
     dotColor: 'bg-thyme',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Inventory',
@@ -68,6 +74,7 @@ const nav = [
     color: 'terracotta',
     activeColor: 'bg-terracotta-light text-ink-dark',
     dotColor: 'bg-terracotta',
+    badgeKey: 'inventory' as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Marketing',
@@ -76,6 +83,7 @@ const nav = [
     color: 'butter',
     activeColor: 'bg-butter-light text-ink-dark',
     dotColor: 'bg-butter',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Competitive',
@@ -84,6 +92,7 @@ const nav = [
     color: 'blueberry',
     activeColor: 'bg-blueberry-light text-ink-dark',
     dotColor: 'bg-blueberry',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Email',
@@ -92,6 +101,7 @@ const nav = [
     color: 'blueberry',
     activeColor: 'bg-blueberry-light text-ink-dark',
     dotColor: 'bg-blueberry',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
   {
     label: 'Contacts',
@@ -100,11 +110,42 @@ const nav = [
     color: 'candy',
     activeColor: 'bg-candy-light text-ink-dark',
     dotColor: 'bg-candy',
+    badgeKey: null as 'inventory' | 'tasks' | null,
   },
 ]
 
+interface BadgeCounts {
+  inventory: number // critical stock items
+  tasks: number     // overdue tasks
+}
+
 export function Sidebar() {
   const pathname = usePathname()
+  const [badges, setBadges] = useState<BadgeCounts>({ inventory: 0, tasks: 0 })
+
+  useEffect(() => {
+    // Fetch critical stock count
+    fetch('/api/inventory')
+      .then(r => r.json())
+      .then((rows: { status: string; is_bundle: number; shopify_qty: number; reorder_threshold: number }[]) => {
+        const active = rows.filter(r => r.status === 'active' && !r.is_bundle)
+        const critical = active.filter(r => r.shopify_qty <= Math.floor(r.reorder_threshold * 0.5))
+        setBadges(prev => ({ ...prev, inventory: critical.length }))
+      })
+      .catch(() => {})
+
+    // Fetch overdue tasks count
+    fetch('/api/tasks')
+      .then(r => r.json())
+      .then((tasks: { status: string; due_date: string | null }[]) => {
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const overdue = tasks.filter(t =>
+          t.status !== 'done' && t.due_date && new Date(t.due_date) < today
+        )
+        setBadges(prev => ({ ...prev, tasks: overdue.length }))
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <aside className="w-60 h-full flex flex-col bg-oatmilk border-r border-mushroom shrink-0">
@@ -133,6 +174,9 @@ export function Sidebar() {
         {nav.map((item) => {
           const isActive = pathname.startsWith(item.href)
           const Icon = item.icon
+          const count = item.badgeKey ? badges[item.badgeKey] : 0
+          const showBadge = count > 0
+
           return (
             <Link
               key={item.href}
@@ -157,7 +201,32 @@ export function Sidebar() {
               >
                 {item.label}
               </span>
-              {isActive && <ChevronRight className="w-3 h-3 opacity-40" />}
+
+              {/* Live count badge */}
+              {showBadge && (
+                <span
+                  style={{
+                    minWidth: 18,
+                    height: 18,
+                    borderRadius: 9,
+                    background: item.badgeKey === 'inventory' ? '#C94040' : '#B87816',
+                    color: '#fff',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    fontFamily: "'Jost', system-ui, sans-serif",
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 4px',
+                    lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  {count}
+                </span>
+              )}
+
+              {isActive && !showBadge && <ChevronRight className="w-3 h-3 opacity-40" />}
             </Link>
           )
         })}
