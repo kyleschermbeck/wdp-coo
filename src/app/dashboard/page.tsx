@@ -46,6 +46,8 @@ interface InventoryRow {
   shopify_qty: number
   reorder_threshold: number
   accent_color: string
+  status: string
+  is_bundle: number
 }
 
 interface MarketingEvent {
@@ -445,11 +447,13 @@ export default function DashboardPage() {
       return (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9)
     })
 
-  const lowStockItems = inventory
+  const activeProducts = inventory.filter((r) => r.status === 'active' && !r.is_bundle)
+
+  const lowStockItems = activeProducts
     .filter((r) => r.shopify_qty <= r.reorder_threshold)
     .slice(0, 5)
 
-  const criticalStockItems = inventory.filter((r) => r.shopify_qty < 2)
+  const criticalStockItems = activeProducts.filter((r) => r.shopify_qty < 2)
 
   const activeProjectCount = projects.filter((p) => p.status !== 'completed' && p.status !== 'archived').length
 
