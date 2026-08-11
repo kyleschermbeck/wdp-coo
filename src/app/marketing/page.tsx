@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/ui/PageHeader'
 import {
   format,
   addMonths,
@@ -6012,41 +6013,28 @@ export default function MarketingPage() {
   }
 
   return (
-    <div className="min-h-full bg-cream p-8">
-      {/* Header */}
-      <div className="mb-6" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-        <div>
-          <p
-            className="text-xs font-semibold uppercase tracking-widest text-ink mb-1"
-            style={{ fontFamily: "'Jost', system-ui, sans-serif", letterSpacing: '0.15em' }}
+    <div className="page-wrap min-h-full bg-cream">
+      <PageHeader
+        eyebrow="Operations"
+        title="Marketing"
+        actions={
+          <button
+            onClick={syncAll}
+            disabled={syncingAll}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontFamily: "'Jost', system-ui, sans-serif",
+              fontSize: 13, fontWeight: 700,
+              padding: '10px 20px', borderRadius: 10, border: 'none', cursor: syncingAll ? 'default' : 'pointer',
+              background: syncingAll ? 'rgba(44,44,44,0.08)' : '#2C2C2C',
+              color: syncingAll ? 'rgba(44,44,44,0.4)' : '#FAF9F6',
+            }}
           >
-            Operations
-          </p>
-          <h1
-            className="text-5xl text-ink-dark"
-            style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 700 }}
-          >
-            Marketing
-          </h1>
-        </div>
-        <button
-          onClick={syncAll}
-          disabled={syncingAll}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            fontFamily: "'Jost', system-ui, sans-serif",
-            fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
-            padding: '10px 20px', borderRadius: 10, border: 'none', cursor: syncingAll ? 'default' : 'pointer',
-            background: syncingAll ? 'rgba(44,44,44,0.08)' : '#2C2C2C',
-            color: syncingAll ? 'rgba(44,44,44,0.4)' : '#FAF9F6',
-            transition: 'all 0.15s',
-            marginBottom: 4,
-          }}
-        >
-          <RefreshCw size={14} style={{ animation: syncingAll ? 'spin 1s linear infinite' : 'none' }} />
-          {syncingAll ? 'Syncing…' : 'Sync All'}
-        </button>
-      </div>
+            <RefreshCw size={14} style={{ animation: syncingAll ? 'spin 1s linear infinite' : 'none' }} />
+            {syncingAll ? 'Syncing…' : 'Sync All'}
+          </button>
+        }
+      />
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 26, borderBottom: '1px solid #D8D2C6' }}>

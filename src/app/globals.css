@@ -97,3 +97,91 @@ html[data-density="compact"] nav a { padding-top: 0.375rem !important; padding-b
 .prose-on-dark a { color: #F0D77A !important; }
 .prose-on-dark p { margin: 0 0 0.65em; line-height: 1.65; }
 .prose-on-dark p:last-child { margin-bottom: 0; }
+
+/* ─── Design system layout utilities ──────────────────────────────────────── */
+/* Wrapped in @layer utilities so Tailwind v4 doesn't strip them             */
+
+@layer utilities {
+
+  /* Standard page scroll area — constrained width + generous breathing room */
+  .page-wrap {
+    padding: clamp(32px, 5vw, 56px) clamp(28px, 5vw, 56px) 100px;
+    max-width: 1200px;
+    width: 100%;
+  }
+
+  /* Section eyebrow label */
+  .section-label {
+    font-family: var(--font-body), system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(116, 116, 116, 0.6);
+    margin: 0;
+  }
+
+  /* White content card */
+  .wdp-card {
+    background: #fff;
+    border: 1px solid rgba(216, 210, 198, 0.6);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+
+  /* Smaller card variant */
+  .wdp-card-sm {
+    background: #fff;
+    border: 1px solid rgba(216, 210, 198, 0.6);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+
+  /* Hover state for clickable cards/rows */
+  .wdp-hover {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease, background 0.1s ease;
+  }
+  .wdp-hover:hover {
+    box-shadow: 0 3px 14px rgba(44, 44, 44, 0.08);
+    border-color: rgba(216, 210, 198, 0.9);
+  }
+
+  /* Table row hover */
+  .wdp-row {
+    border-bottom: 1px solid rgba(216, 210, 198, 0.35);
+    transition: background 0.1s ease;
+    cursor: pointer;
+  }
+  .wdp-row:hover {
+    background: rgba(251, 247, 243, 0.8);
+  }
+  .wdp-row:last-child {
+    border-bottom: none;
+  }
+
+  /* Section divider */
+  .wdp-divider {
+    border: none;
+    border-top: 1px solid rgba(216, 210, 198, 0.5);
+    margin: 24px 0;
+  }
+
+  /* Stat tile — number + label */
+  .wdp-stat-value {
+    font-family: var(--font-body), system-ui, sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: #2C2C2C;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    margin: 0 0 4px;
+  }
+
+  /* Subtle tinted bg for selected / highlighted rows */
+  .wdp-selected {
+    background: #FBF7F3;
+    border-color: #C27A54 !important;
+  }
+
+}

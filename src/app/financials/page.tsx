@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { TrendingUp, TrendingDown, RefreshCw, X, Package, User } from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -765,13 +766,8 @@ export default function FinancialsPage() {
 
   if (loading && shopifyStatus === null) {
     return (
-      <div className="p-8 max-w-6xl">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ink mb-1" style={{ fontFamily: "'Jost', system-ui, sans-serif", letterSpacing: '0.15em' }}>
-          Operations
-        </p>
-        <h1 className="text-5xl text-ink-dark mb-8" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 700 }}>
-          Financials
-        </h1>
+      <div className="page-wrap" style={{ maxWidth: 1240 }}>
+        <PageHeader eyebrow="Operations" title="Financials" />
         <div className="flex justify-center py-16">
           <p className="text-sm text-ink/50" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Loading…</p>
         </div>
@@ -785,22 +781,12 @@ export default function FinancialsPage() {
   const productRevenue = computeProductRevenue(orders)
 
   return (
-    <div className="p-8 max-w-6xl">
-      {/* Header */}
-      <div className="mb-6">
-        <p
-          className="text-xs font-semibold uppercase tracking-widest text-ink mb-1"
-          style={{ fontFamily: "'Jost', system-ui, sans-serif", letterSpacing: '0.15em' }}
-        >
-          Operations
-        </p>
-        <h1
-          className="text-5xl text-ink-dark"
-          style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 700 }}
-        >
-          Financials
-        </h1>
-      </div>
+    <div className="page-wrap" style={{ maxWidth: 1240 }}>
+      <PageHeader
+        eyebrow="Operations"
+        title="Financials"
+        subtitle="Revenue, orders, and cost of goods — pulled live from Shopify."
+      />
 
       {/* Not connected state */}
       {!shopifyStatus?.connected ? (

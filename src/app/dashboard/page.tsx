@@ -8,6 +8,7 @@ import { TaskDetailDrawer } from '@/components/projects/TaskDetailDrawer'
 import { SubtaskDetailDrawer } from '@/components/projects/SubtaskDetailDrawer'
 import type { Task as LibTask, Subtask as LibSubtask } from '@/lib/types'
 import { StatusRail } from '@/components/ui/StatusRail'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -564,32 +565,26 @@ export default function DashboardPage() {
 
   return (
     <div
+      className="page-wrap"
       style={{
-        padding: 'clamp(18px,4vw,40px) clamp(16px,4vw,44px) 90px',
         maxWidth: 1160,
         fontFamily: "'Jost', system-ui, sans-serif",
       }}
     >
-      {/* ── Header ── */}
-      <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#747474', margin: '0 0 6px' }}>
-        {formatDate()}
-      </p>
-      <h1 style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 700, fontSize: 44, margin: '0 0 6px', color: '#2C2C2C', lineHeight: 1.05 }}>
-        {greeting()}
-      </h1>
-      <p style={{ fontSize: 15, color: '#747474', margin: '0 0 24px', maxWidth: 560 }}>
-        Everything running the business tonight — inventory, revenue, the projects moving, and what your agents caught while you weren&apos;t looking.
-      </p>
-
-      {/* ── Exception Rails ── */}
-      {criticalStockItems.length > 0 && (
-        <StatusRail
-          severity="critical"
-          message={`${criticalStockItems.length} product${criticalStockItems.length > 1 ? 's' : ''} out of stock`}
-          items={criticalStockItems.map(r => ({ label: r.title }))}
-          onViewAll={() => router.push('/inventory')}
-        />
-      )}
+      <PageHeader
+        eyebrow={formatDate()}
+        title={greeting()}
+        subtitle="Everything running the business — inventory, revenue, projects, and what your agents caught while you weren't looking."
+      >
+        {criticalStockItems.length > 0 && (
+          <StatusRail
+            severity="critical"
+            message={`${criticalStockItems.length} product${criticalStockItems.length > 1 ? 's' : ''} out of stock`}
+            items={criticalStockItems.map(r => ({ label: r.title }))}
+            onViewAll={() => router.push('/inventory')}
+          />
+        )}
+      </PageHeader>
 
       {/* ── Morning Brief + KPI Row ── */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 28, alignItems: 'flex-start' }}>

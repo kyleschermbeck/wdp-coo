@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { AlertTriangle, RefreshCw, Plus, X, ExternalLink, Pencil, Trash2 } from 'lucide-react'
 import { StatusRail } from '@/components/ui/StatusRail'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1568,59 +1569,49 @@ export default function InventoryPage() {
 
   return (
     <>
-      <div style={{ padding: 'clamp(18px,4vw,40px) clamp(16px,4vw,44px) 90px', maxWidth: 1160 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div>
-            <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#747474', margin: '0 0 6px', ...FONT }}>Operations</p>
-            <h1 style={{ ...SERIF, fontWeight: 700, fontSize: 42, margin: 0, color: '#2C2C2C' }}>Inventory</h1>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {shopifyStatus?.connected && (
-              <>
+      <div className="page-wrap" style={{ maxWidth: 1160 }}>
+        <PageHeader
+          eyebrow="Operations"
+          title="Inventory"
+          meta={shopifyStatus?.connected ? `${active.length} active · ${draft.length} draft · Synced ${syncedLabel}` : undefined}
+          actions={
+            shopifyStatus?.connected ? (
+              <div style={{ display: 'flex', gap: 8 }}>
                 <a href="https://admin.shopify.com/store/eiy0fe-13/products" target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 8, border: '1px solid #D8D2C6', background: 'transparent', color: '#2C2C2C', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', ...FONT }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 10, border: '1px solid #D8D2C6', background: 'transparent', color: '#2C2C2C', fontSize: 13, fontWeight: 600, textDecoration: 'none', ...FONT }}>
                   <ExternalLink size={14} /> Shopify
                 </a>
                 <button onClick={handleSync} disabled={syncing}
-                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 8, background: '#2C2C2C', color: '#FAF9F6', fontSize: 13.5, fontWeight: 600, border: 'none', cursor: 'pointer', ...FONT }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 10, background: '#2C2C2C', color: '#FAF9F6', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', ...FONT }}>
                   <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
                   {syncing ? 'Syncing…' : 'Sync now'}
                 </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Exception rail — critical first, then warning */}
-        {criticalProducts.length > 0 && (
-          <StatusRail
-            severity="critical"
-            message={`${criticalProducts.length} product${criticalProducts.length > 1 ? 's' : ''} out of stock`}
-            items={criticalProducts.map(p => ({
-              label: `${p.title} (${getDisplayQty(p)})`,
-              onClick: () => setSelectedProduct(p),
-            }))}
-          />
-        )}
-        {warningProducts.length > 0 && (
-          <StatusRail
-            severity="warning"
-            message={`${warningProducts.length} product${warningProducts.length > 1 ? 's' : ''} below reorder threshold`}
-            items={warningProducts.map(p => ({
-              label: `${p.title} (${getDisplayQty(p)})`,
-              onClick: () => setSelectedProduct(p),
-            }))}
-          />
-        )}
-
-        {/* Status bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 12.5, color: 'rgba(116,116,116,0.7)', margin: 0, ...FONT }}>{active.length} active · {draft.length} draft</p>
-          <span style={{ fontSize: 12, color: 'rgba(116,116,116,0.5)', ...FONT }}>
-            Synced from Shopify · {syncedLabel}
-          </span>
-        </div>
+              </div>
+            ) : undefined
+          }
+        >
+          {/* Exception rails inside header children slot */}
+          {criticalProducts.length > 0 && (
+            <StatusRail
+              severity="critical"
+              message={`${criticalProducts.length} product${criticalProducts.length > 1 ? 's' : ''} out of stock`}
+              items={criticalProducts.map(p => ({
+                label: `${p.title} (${getDisplayQty(p)})`,
+                onClick: () => setSelectedProduct(p),
+              }))}
+            />
+          )}
+          {warningProducts.length > 0 && (
+            <StatusRail
+              severity="warning"
+              message={`${warningProducts.length} product${warningProducts.length > 1 ? 's' : ''} below reorder threshold`}
+              items={warningProducts.map(p => ({
+                label: `${p.title} (${getDisplayQty(p)})`,
+                onClick: () => setSelectedProduct(p),
+              }))}
+            />
+          )}
+        </PageHeader>
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #D8D2C6', marginBottom: 24 }}>

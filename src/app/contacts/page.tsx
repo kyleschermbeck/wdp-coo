@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Search, RefreshCw, ChevronRight, X, ShoppingBag, DollarSign, Users, Mail, MousePointer, ShoppingCart, Eye, Send, AlertCircle, Package, TrendingUp, Calendar } from 'lucide-react'
 import { format, parseISO, formatDistanceToNow } from 'date-fns'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 const FONT   = "'Jost', system-ui, sans-serif"
 const SERIF  = "'Cormorant Garamond', Georgia, serif"
@@ -538,44 +539,43 @@ export default function ContactsPage() {
   const repeatBuyers   = customers.filter(c => c.orders_count > 1).length
 
   return (
-    <div style={{ padding: 'clamp(20px,4vw,40px)', fontFamily: FONT }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
-        <div>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: INK_LIGHT, marginBottom: 4 }}>Shopify + Klaviyo</p>
-          <h1 style={{ fontFamily: SERIF, fontSize: 44, fontWeight: 700, color: INK, margin: 0, lineHeight: 1 }}>Contacts</h1>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* View toggle */}
-          <div style={{ display: 'flex', background: OATMILK, borderRadius: 8, padding: 3, border: BORDER }}>
-            {(['customers', 'prospects'] as PageView[]).map(v => (
+    <div className="page-wrap" style={{ fontFamily: FONT }}>
+      <PageHeader
+        eyebrow="Shopify + Klaviyo"
+        title="Contacts"
+        meta={`${customers.length} customers · ${prospects.length} prospects`}
+        actions={
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', background: OATMILK, borderRadius: 10, padding: 3, border: BORDER }}>
+              {(['customers', 'prospects'] as PageView[]).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  style={{
+                    fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                    padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: view === v ? '#fff' : 'transparent',
+                    color: view === v ? INK : INK_LIGHT,
+                    boxShadow: view === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  }}
+                >
+                  {v === 'customers' ? `Customers (${customers.length})` : `Prospects (${prospects.length})`}
+                </button>
+              ))}
+            </div>
+            {shopifyConnected && (
               <button
-                key={v}
-                onClick={() => setView(v)}
-                style={{
-                  fontFamily: FONT, fontSize: 12, fontWeight: 600,
-                  padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                  background: view === v ? '#fff' : 'transparent',
-                  color: view === v ? INK : INK_LIGHT,
-                  boxShadow: view === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                }}
+                onClick={sync}
+                disabled={syncing}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: 'none', background: INK, color: '#fff', fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: syncing ? 0.5 : 1 }}
               >
-                {v === 'customers' ? `Customers (${customers.length})` : `Prospects (${prospects.length})`}
+                <RefreshCw style={{ width: 14, height: 14, ...(syncing ? { animation: 'spin 1s linear infinite' } : {}) }} />
+                {syncing ? 'Syncing…' : 'Sync'}
               </button>
-            ))}
+            )}
           </div>
-          {shopifyConnected && (
-            <button
-              onClick={sync}
-              disabled={syncing}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 8, border: 'none', background: INK, color: '#fff', fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: syncing ? 0.5 : 1 }}
-            >
-              <RefreshCw style={{ width: 14, height: 14, ...(syncing ? { animation: 'spin 1s linear infinite' } : {}) }} />
-              {syncing ? 'Syncing…' : 'Sync'}
-            </button>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {loading ? (
         <p style={{ color: INK_LIGHT, fontSize: 14 }}>Loading…</p>

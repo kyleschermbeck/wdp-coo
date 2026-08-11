@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { RefreshCw, Sparkles } from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 const FONT: React.CSSProperties = { fontFamily: "'Jost', system-ui, sans-serif" }
 const SERIF: React.CSSProperties = { fontFamily: "'Cormorant Garamond', Georgia, serif" }
@@ -136,28 +137,23 @@ export default function CompetitivePage() {
   }
 
   return (
-    <div style={{ padding: 'clamp(18px,4vw,40px) clamp(16px,4vw,44px) 90px', maxWidth: 1160, ...FONT }}>
+    <div className="page-wrap" style={{ maxWidth: 1160, ...FONT }}>
 
-      {/* Header */}
-      <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#747474', margin: '0 0 6px' }}>
-        Operations
-      </p>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 6 }}>
-        <h1 style={{ ...SERIF, fontWeight: 700, fontSize: 42, margin: 0, color: '#2C2C2C' }}>
-          Competitive Insights
-        </h1>
-        <button
-          onClick={refresh}
-          disabled={refreshing}
-          style={{ ...FONT, display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: '#2C2C2C', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: refreshing ? 'default' : 'pointer', opacity: refreshing ? 0.6 : 1, flexShrink: 0, marginBottom: 4 }}
-        >
-          {refreshing ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {refreshing ? 'Refreshing…' : 'Refresh Analysis'}
-        </button>
-      </div>
-      <p style={{ fontSize: 14, color: '#747474', margin: '0 0 16px', maxWidth: 640, lineHeight: 1.6 }}>
-        How Weeknight Dinner Party stacks up against the brands fighting for the same shelf — and what it suggests for your next move.
-      </p>
+      <PageHeader
+        eyebrow="Operations"
+        title="Competitive Insights"
+        subtitle="How Weeknight Dinner Party stacks up against the brands fighting for the same shelf — and what it suggests for your next move."
+        actions={
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            style={{ ...FONT, display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: '#2C2C2C', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: refreshing ? 'default' : 'pointer', opacity: refreshing ? 0.6 : 1 }}
+          >
+            {refreshing ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {refreshing ? 'Refreshing…' : 'Refresh Analysis'}
+          </button>
+        }
+      />
 
       {/* Customization box */}
       <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.7)', borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>

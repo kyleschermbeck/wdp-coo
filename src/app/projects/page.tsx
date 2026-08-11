@@ -12,6 +12,8 @@ import { GanttChart } from '@/components/projects/GanttChart'
 import { STATUS_SELECT_BG, PRIORITY_SELECT_BG } from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
 import { format, parseISO, isPast, isToday } from 'date-fns'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { StatusRail } from '@/components/ui/StatusRail'
 
 // ─── Color / style maps ────────────────────────────────────────────────────────
 
@@ -783,10 +785,11 @@ function WorkTrackingInner() {
   const activeProjectCount = projects.filter(p => p.status === 'active').length
   const totalTasks = tasks.length
   const doneTasks = tasks.filter(t => t.status === 'done').length
-  const overdueTasks = tasks.filter(t => {
+  const overdueTasksList = tasks.filter(t => {
     if (!t.due_date || t.status === 'done') return false
     return new Date(t.due_date + 'T00:00:00') < new Date(new Date().toDateString())
-  }).length
+  })
+  const overdueTasks = overdueTasksList.length
 
   const kpis = [
     { label: 'Projects', value: String(projects.length), sub: `${activeProjectCount} active`, color: '#9BAE9A' },
@@ -889,54 +892,50 @@ function WorkTrackingInner() {
     <div style={{ minHeight: '100%', ...FONT }}>
 
       {/* ── Header ── */}
-      <div style={{ padding: 'clamp(18px,4vw,40px) clamp(16px,4vw,44px) 0', maxWidth: 1200 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#747474', margin: '0 0 6px' }}>
-              Operations
-            </p>
-            <h1 style={{ ...SERIF, fontWeight: 700, fontSize: 42, margin: '0 0 4px', color: '#2C2C2C' }}>
-              Work Tracking
-            </h1>
-            <p style={{ fontSize: 13, color: '#747474', margin: 0 }}>
-              {projects.length} projects — {activeProjectCount} active
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              onClick={() => {
-                setNtProject(selectedProject ? String(selectedProject.id) : '')
-                setShowNewTaskModal(true)
-              }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 8,
-                background: '#FBF0E3', color: '#2C2C2C', border: '1px solid #D8D2C6',
-                fontSize: 13.5, fontWeight: 600, cursor: 'pointer', ...FONT,
-              }}
-            >
-              <Plus size={14} /> New Task
-            </button>
-            <button
-              onClick={() => setShowNew(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 8,
-                background: '#2C2C2C', color: '#FAF9F6', border: 'none',
-                fontSize: 13.5, fontWeight: 600, cursor: 'pointer', ...FONT,
-              }}
-            >
-              <Plus size={14} /> New Project
-            </button>
-          </div>
-        </div>
+      <div className="page-wrap" style={{ maxWidth: 1200, paddingBottom: 0 }}>
+        <PageHeader
+          eyebrow="Operations"
+          title="Work Tracking"
+          meta={`${projects.length} projects · ${activeProjectCount} active`}
+          actions={
+            <>
+              <button
+                onClick={() => { setNtProject(selectedProject ? String(selectedProject.id) : ''); setShowNewTaskModal(true) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: '#FBF0E3', color: '#2C2C2C', border: '1px solid #D8D2C6', fontSize: 13, fontWeight: 600, cursor: 'pointer', ...FONT }}
+              >
+                <Plus size={14} /> New Task
+              </button>
+              <button
+                onClick={() => setShowNew(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: '#2C2C2C', color: '#FAF9F6', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', ...FONT }}
+              >
+                <Plus size={14} /> New Project
+              </button>
+            </>
+          }
+        >
+          {overdueTasks > 0 && (
+            <StatusRail
+              severity="warning"
+              message={`${overdueTasks} overdue task${overdueTasks > 1 ? 's' : ''}`}
+              items={overdueTasksList.slice(0, 8).map(t => ({ label: t.title, onClick: () => setDrawerTask(t) }))}
+            />
+          )}
+        </PageHeader>
 
         {/* KPI row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 14, marginBottom: 28 }}>
           {kpis.map(k => (
-            <div key={k.label} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '16px 18px' }}>
-              <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.65)', margin: '0 0 6px' }}>
-                {k.label}
-              </p>
-              <p style={{ fontSize: 24, fontWeight: 600, color: '#2C2C2C', margin: '0 0 3px' }}>{k.value}</p>
+            <div
+              key={k.label}
+              className="wdp-card-sm"
+              style={k.label === 'Overdue' && overdueTasks > 0 ? {
+                borderLeft: '3px solid #B87816',
+                borderColor: '#B87816',
+              } : undefined}
+            >
+              <p className="section-label" style={{ marginBottom: 8 }}>{k.label}</p>
+              <p className="wdp-stat-value" style={{ color: k.label === 'Overdue' && overdueTasks > 0 ? '#B87816' : '#2C2C2C' }}>{k.value}</p>
               <p style={{ fontSize: 11.5, fontWeight: 600, color: k.color, margin: 0 }}>{k.sub}</p>
             </div>
           ))}
@@ -952,7 +951,7 @@ function WorkTrackingInner() {
 
       {/* ── Overview tab ── */}
       {tab === 'overview' && (
-        <div style={{ padding: 'clamp(16px,4vw,24px) clamp(16px,4vw,44px) 90px', maxWidth: 1200 }}>
+        <div className="page-wrap" style={{ maxWidth: 1200 }}>
           {loading ? (
             <p style={{ color: '#747474', fontSize: 13 }}>Loading…</p>
           ) : (
