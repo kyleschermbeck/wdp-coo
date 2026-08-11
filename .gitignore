@@ -49,3 +49,7 @@ data/
 .claude/
 wdp-coo.db
 wdp.db
+src/**/*.bak_*
+
+# SQLite databases — persisted via Railway volume
+data/*.db
