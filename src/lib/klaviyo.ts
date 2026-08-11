@@ -298,6 +298,119 @@ async function fetchMetricAggregate30d(apiKey: string, metricId: string, measure
   }, 0)
 }
 
+// ─── Per-campaign metrics ──────────────────────────────────────────────────────
+
+interface CampaignMetricResult {
+  recipients: number
+  opens: number
+  unique_opens: number
+  clicks: number
+  unique_clicks: number
+  revenue: number
+  unsubscribes: number
+  open_rate: number
+  click_rate: number
+}
+
+// Fetch all metric IDs in one call and build a name → id map
+async function fetchAllMetricIds(apiKey: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  try {
+    const res = await klaviyoFetch(apiKey, `/metrics/?fields[metric]=name&page[size]=100`)
+    if (!res.ok) return map
+    const data = await res.json() as { data: Array<{ id: string; attributes: { name: string } }> }
+    for (const m of data.data) map.set(m.attributes.name, m.id)
+  } catch { /* ignore */ }
+  return map
+}
+
+async function fetchCampaignMetricValue(
+  apiKey: string,
+  metricId: string,
+  campaignId: string,
+  measurement: 'count' | 'unique' | 'sum_value',
+  sendTime: string,  // ISO date string — look back from 30 days after send
+): Promise<number> {
+  try {
+    const start = new Date(sendTime)
+    const end = new Date(sendTime)
+    end.setDate(end.getDate() + 30)
+    // Cap end at now
+    if (end > new Date()) end.setTime(Date.now())
+
+    const fmt = (d: Date) => d.toISOString().split('.')[0]
+
+    const res = await klaviyoFetch(apiKey, '/metric-aggregates/', {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          type: 'metric-aggregate',
+          attributes: {
+            metric_id: metricId,
+            measurements: [measurement],
+            interval: 'day',
+            filter: [
+              `greater-or-equal(datetime,${fmt(start)})`,
+              `less-than(datetime,${fmt(end)})`,
+              `equals(campaign_id,"${campaignId}")`,
+            ],
+          },
+        },
+      }),
+    })
+    if (!res.ok) return 0
+    const data = await res.json() as {
+      data: { attributes: { data: Array<{ measurements: Record<string, number[]> }> } }
+    }
+    const rows = data.data?.attributes?.data ?? []
+    return rows.reduce((sum, row) => {
+      const vals = row.measurements[measurement] ?? []
+      return sum + vals.reduce((s: number, v: number) => s + v, 0)
+    }, 0)
+  } catch { return 0 }
+}
+
+export async function fetchCampaignMetrics(
+  apiKey: string,
+  campaignId: string,
+  sendTime: string,
+  metricIds: Map<string, string>,
+): Promise<CampaignMetricResult> {
+  const receivedId    = metricIds.get('Received Email')
+  const openedId      = metricIds.get('Opened Email')
+  const clickedId     = metricIds.get('Clicked Email')
+  const placedOrderId = metricIds.get('Placed Order')
+  const unsubscribedId = metricIds.get('Unsubscribed')
+
+  // Fetch in parallel — but keep it serial if we want to stay within rate limits
+  // Using allSettled so one failure doesn't block the rest
+  const [recvRes, openRes, uniqueOpenRes, clickRes, uniqueClickRes, revenueRes, unsubRes] =
+    await Promise.allSettled([
+      receivedId    ? fetchCampaignMetricValue(apiKey, receivedId,    campaignId, 'count',     sendTime) : Promise.resolve(0),
+      openedId      ? fetchCampaignMetricValue(apiKey, openedId,      campaignId, 'count',     sendTime) : Promise.resolve(0),
+      openedId      ? fetchCampaignMetricValue(apiKey, openedId,      campaignId, 'unique',    sendTime) : Promise.resolve(0),
+      clickedId     ? fetchCampaignMetricValue(apiKey, clickedId,     campaignId, 'count',     sendTime) : Promise.resolve(0),
+      clickedId     ? fetchCampaignMetricValue(apiKey, clickedId,     campaignId, 'unique',    sendTime) : Promise.resolve(0),
+      placedOrderId ? fetchCampaignMetricValue(apiKey, placedOrderId, campaignId, 'sum_value', sendTime) : Promise.resolve(0),
+      unsubscribedId ? fetchCampaignMetricValue(apiKey, unsubscribedId, campaignId, 'count',  sendTime) : Promise.resolve(0),
+    ])
+
+  const val = (r: PromiseSettledResult<number>) => r.status === 'fulfilled' ? r.value : 0
+
+  const recipients   = val(recvRes)
+  const opens        = val(openRes)
+  const unique_opens = val(uniqueOpenRes)
+  const clicks       = val(clickRes)
+  const unique_clicks = val(uniqueClickRes)
+  const revenue      = val(revenueRes)
+  const unsubscribes = val(unsubRes)
+
+  const open_rate  = recipients > 0 ? unique_opens  / recipients : 0
+  const click_rate = recipients > 0 ? unique_clicks / recipients : 0
+
+  return { recipients, opens, unique_opens, clicks, unique_clicks, revenue, unsubscribes, open_rate, click_rate }
+}
+
 // ─── Main sync ─────────────────────────────────────────────────────────────────
 
 export async function syncKlaviyoData(db: Database.Database): Promise<KlaviyoSyncResult> {
@@ -333,6 +446,32 @@ export async function syncKlaviyoData(db: Database.Database): Promise<KlaviyoSyn
   db.transaction(() => {
     for (const c of campaigns) upsertCampaign.run(c.id, c.name, c.status, c.subject, c.from_email, c.send_time)
   })()
+
+  // ── Per-campaign metrics (only for sent campaigns) ──
+  const sentCampaigns = campaigns.filter(c => c.status === 'Sent' || c.status === 'sent')
+  if (sentCampaigns.length > 0) {
+    const metricIds = await fetchAllMetricIds(api_key)
+    const upsertCampaignMetrics = db.prepare(`
+      UPDATE klaviyo_campaigns SET
+        recipients = ?, opens = ?, unique_opens = ?,
+        clicks = ?, unique_clicks = ?, revenue = ?,
+        unsubscribes = ?, open_rate = ?, click_rate = ?,
+        synced_at = datetime('now')
+      WHERE klaviyo_id = ?
+    `)
+    for (const c of sentCampaigns) {
+      if (!c.send_time) continue
+      try {
+        const m = await fetchCampaignMetrics(api_key, c.id, c.send_time, metricIds)
+        upsertCampaignMetrics.run(
+          m.recipients, m.opens, m.unique_opens,
+          m.clicks, m.unique_clicks, m.revenue,
+          m.unsubscribes, m.open_rate, m.click_rate,
+          c.id,
+        )
+      } catch { /* skip individual failures */ }
+    }
+  }
 
   // ── Flows ──
   const flows = await fetchKlaviyoFlows(api_key)

@@ -26,6 +26,16 @@
 
   --font-display: 'Cormorant Garamond', Georgia, serif;
   --font-body: 'Jost', system-ui, sans-serif;
+
+  /* Semantic exception colors */
+  --color-critical: #C94040;
+  --color-critical-light: #FAF0EE;
+  --color-warning: #B87816;
+  --color-warning-light: #FDF6EA;
+  --color-success: #3A8A5A;
+  --color-success-light: #EDF6F1;
+  --color-info: #3B68B8;
+  --color-info-light: #EEF3FB;
 }
 
 * {

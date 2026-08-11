@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sho
   const db = getDb()
   const { shopifyId } = await params
   const body = await req.json()
-  const { ingredients, packaging, labor_cost } = body
+  const { ingredients, packaging, labor_cost, cost_per_unit } = body
 
   db.transaction(() => {
     if (Array.isArray(ingredients)) {
@@ -53,10 +53,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sho
       packaging.forEach((supply_id: number) => ins.run(shopifyId, supply_id))
     }
 
-    if (labor_cost != null) {
-      db.prepare(`INSERT INTO product_local (shopify_product_id, labor_cost)
-        VALUES (?, ?) ON CONFLICT(shopify_product_id) DO UPDATE SET labor_cost=excluded.labor_cost`
-      ).run(shopifyId, parseFloat(labor_cost))
+    if (labor_cost != null || cost_per_unit != null) {
+      db.prepare(`
+        INSERT INTO product_local (shopify_product_id, labor_cost, cost_per_unit)
+        VALUES (?, ?, ?)
+        ON CONFLICT(shopify_product_id) DO UPDATE SET
+          labor_cost = COALESCE(excluded.labor_cost, labor_cost),
+          cost_per_unit = COALESCE(excluded.cost_per_unit, cost_per_unit)
+      `).run(
+        shopifyId,
+        labor_cost != null ? parseFloat(labor_cost) : null,
+        cost_per_unit != null ? parseFloat(cost_per_unit) : null,
+      )
     }
   })()
 

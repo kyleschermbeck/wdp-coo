@@ -1,14 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { X, Send, Leaf, ChevronDown, Loader2 } from 'lucide-react'
+import { X, Send, Leaf, ChevronDown, Loader2, Paperclip } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { marked } from 'marked'
 
 marked.setOptions({ breaks: true })
 
 interface Agent { id: number; name: string; description: string | null; active: number }
-interface Message { role: 'user' | 'assistant'; content: string }
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+  imagePreview?: string  // data URL for display only — stripped before localStorage / API
+}
+interface ImageAttachment { data: string; mediaType: string; preview: string }
 
 const FONT = { fontFamily: "'Jost', system-ui, sans-serif" }
 const STORAGE_KEY = (agentId: number) => `chat_history_agent_${agentId}`
@@ -20,8 +25,10 @@ export function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [imageAttachment, setImageAttachment] = useState<ImageAttachment | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
 
@@ -42,11 +49,13 @@ export function ChatWidget() {
       })
   }, [])
 
-  // Persist messages to localStorage when they change
+  // Persist messages to localStorage — strip imagePreview (too large to store)
   useEffect(() => {
     if (agentId === null) return
     try {
-      localStorage.setItem(STORAGE_KEY(agentId), JSON.stringify(messages))
+      localStorage.setItem(STORAGE_KEY(agentId), JSON.stringify(
+        messages.map(({ imagePreview: _, ...m }) => m)
+      ))
     } catch { /* ignore */ }
   }, [messages, agentId])
 
@@ -69,18 +78,48 @@ export function ChatWidget() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const data = result.split(',')[1]
+      const mediaType = result.match(/data:([^;]+)/)?.[1] ?? 'image/jpeg'
+      setImageAttachment({ data, mediaType, preview: result })
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''  // reset so the same file can be re-attached
+  }
+
   async function send() {
     const text = input.trim()
-    if (!text || streaming || !agentId) return
-    const next: Message[] = [...messages, { role: 'user', content: text }]
+    if ((!text && !imageAttachment) || streaming || !agentId) return
+
+    const newMsg: Message = {
+      role: 'user',
+      content: text,
+      ...(imageAttachment ? { imagePreview: imageAttachment.preview } : {}),
+    }
+    const next: Message[] = [...messages, newMsg]
     setMessages(next)
     setInput('')
+    const capturedImage = imageAttachment
+    setImageAttachment(null)
     setStreaming(true)
+
+    // Strip imagePreview from the history we send to the API;
+    // the actual image data travels as a separate top-level field.
+    const apiMessages = next.map(({ imagePreview: _, ...m }) => m)
 
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_id: agentId, messages: next }),
+      body: JSON.stringify({
+        agent_id: agentId,
+        messages: apiMessages,
+        ...(capturedImage ? { image: { data: capturedImage.data, media_type: capturedImage.mediaType } } : {}),
+      }),
     })
 
     if (!res.ok || !res.body) { setStreaming(false); return }
@@ -180,9 +219,17 @@ export function ChatWidget() {
               {m.role === 'user' ? (
                 <div
                   className="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed bg-ink text-cream rounded-br-sm"
-                  style={{ ...FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                  style={{ ...FONT, wordBreak: 'break-word' }}
                 >
-                  {m.content}
+                  {m.imagePreview && (
+                    <img
+                      src={m.imagePreview}
+                      alt="Attached"
+                      className="rounded-lg mb-2 max-w-full"
+                      style={{ maxHeight: 200, display: 'block' }}
+                    />
+                  )}
+                  {m.content && <span style={{ whiteSpace: 'pre-wrap' }}>{m.content}</span>}
                 </div>
               ) : (
                 <div
@@ -204,20 +251,59 @@ export function ChatWidget() {
 
         {/* Input */}
         <div className="px-3 pb-3 pt-2 border-t border-mushroom shrink-0">
+          {/* Image attachment preview */}
+          {imageAttachment && (
+            <div className="mb-2 pl-1 flex items-start gap-2">
+              <div className="relative inline-block">
+                <img
+                  src={imageAttachment.preview}
+                  alt="Attached"
+                  className="rounded-lg border border-mushroom"
+                  style={{ maxHeight: 72, maxWidth: 110, display: 'block', objectFit: 'cover' }}
+                />
+                <button
+                  onClick={() => setImageAttachment(null)}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-ink text-cream flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
+              <p className="text-[10px] text-ink/40 mt-1 leading-relaxed" style={FONT}>Image attached —<br />ask for feedback below</p>
+            </div>
+          )}
+
           <div className="flex items-end gap-2 bg-white border border-mushroom rounded-xl px-3 py-2 focus-within:border-ink transition-colors">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            {/* Paperclip button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={streaming}
+              className="shrink-0 w-6 h-6 flex items-center justify-center text-ink/30 hover:text-ink/60 transition-colors cursor-pointer disabled:opacity-30 mb-0.5"
+              title="Attach image"
+              type="button"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+            </button>
             <textarea
               ref={textareaRef}
               value={input}
               onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px' }}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-              placeholder="Ask anything…"
+              placeholder={imageAttachment ? 'Add context or just hit send…' : 'Ask anything…'}
               rows={1}
               className="flex-1 text-sm text-ink-dark bg-transparent outline-none resize-none placeholder:text-ink/30"
               style={{ ...FONT, minHeight: 24, maxHeight: 120 }}
             />
             <button
               onClick={send}
-              disabled={!input.trim() || streaming}
+              disabled={(!input.trim() && !imageAttachment) || streaming}
               className="shrink-0 w-7 h-7 rounded-lg bg-ink text-cream flex items-center justify-center disabled:opacity-30 cursor-pointer disabled:cursor-default transition-opacity mb-0.5"
             >
               {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { X, Check, Calendar, Trash2, Plus, GripVertical, ChevronRight } from 'lucide-react'
+import { X, Check, Calendar, Trash2, Plus, GripVertical, ChevronRight, Upload, FileText } from 'lucide-react'
 import { Subtask, Tag, Task, TaskStatus } from '@/lib/types'
 import { TagChip, TagPicker } from '@/components/ui/TagPicker'
 import { cn } from '@/lib/utils'
@@ -75,6 +75,11 @@ export function SubtaskDetailDrawer({ subtask, onClose, onUpdate, onDelete, onMo
   const [showDepList, setShowDepList] = useState(false)
   const depInputRef = useRef<HTMLInputElement>(null)
 
+  interface KnowledgeDoc { id: number; original_name: string; file_type: string; file_size: number; created_at: string }
+  const [subtaskDocs, setSubtaskDocs] = useState<KnowledgeDoc[]>([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const docInputRef = useRef<HTMLInputElement>(null)
+
   const open = subtask !== null
 
   useEffect(() => {
@@ -99,6 +104,10 @@ export function SubtaskDetailDrawer({ subtask, onClose, onUpdate, onDelete, onMo
     fetch(`/api/subtasks/dependencies?subtask_id=${subtask.id}`)
       .then(r => r.json())
       .then(data => setDependencies(Array.isArray(data) ? data : []))
+
+    fetch(`/api/documents?subtask_id=${subtask.id}`)
+      .then(r => r.json())
+      .then(data => setSubtaskDocs(Array.isArray(data) ? data : []))
 
     function loadProjectData(projectId: number) {
       fetch(`/api/tasks?project_id=${projectId}`)
@@ -715,6 +724,69 @@ export function SubtaskDetailDrawer({ subtask, onClose, onUpdate, onDelete, onMo
                   onFocus={e => { e.target.style.borderColor = '#9BA69A' }}
                   onBlur={e => { e.target.style.borderColor = 'rgba(216,210,198,0.6)' }}
                 />
+              </div>
+
+              {/* Document attachments */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                  <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: '#9BA69A', ...FONT }}>
+                    Documents
+                  </p>
+                  <button
+                    onClick={() => docInputRef.current?.click()}
+                    disabled={uploadingDoc}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: uploadingDoc ? '#9BA69A' : '#78B7C5', background: 'none', border: 'none', cursor: 'pointer', padding: 0, ...FONT }}
+                  >
+                    <Upload size={11} />
+                    {uploadingDoc ? 'Uploading…' : 'Attach file'}
+                  </button>
+                  <input
+                    ref={docInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.txt,.md,.csv"
+                    style={{ display: 'none' }}
+                    onChange={async e => {
+                      if (!e.target.files || !subtask) return
+                      setUploadingDoc(true)
+                      for (const file of Array.from(e.target.files)) {
+                        const form = new FormData()
+                        form.append('file', file)
+                        form.append('subtask_id', String(subtask.id))
+                        const res = await fetch('/api/documents', { method: 'POST', body: form })
+                        if (res.ok) {
+                          const doc = await res.json()
+                          setSubtaskDocs(prev => [doc, ...prev])
+                        }
+                      }
+                      setUploadingDoc(false)
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+                {subtaskDocs.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {subtaskDocs.map(doc => (
+                      <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, background: 'rgba(247,245,240,0.7)', border: '1px solid rgba(216,210,198,0.5)' }}>
+                        <FileText size={13} color="#78B7C5" style={{ flexShrink: 0 }} />
+                        <span style={{ flex: 1, fontSize: 12, color: '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...FONT }}>{doc.original_name}</span>
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
+                            setSubtaskDocs(prev => prev.filter(d => d.id !== doc.id))
+                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(44,44,44,0.25)', padding: 2, flexShrink: 0 }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#C14B3A')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(44,44,44,0.25)')}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 10, color: 'rgba(44,44,44,0.25)', fontStyle: 'italic', ...FONT }}>No files attached</p>
+                )}
               </div>
             </div>
           </>

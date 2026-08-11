@@ -20,12 +20,26 @@ export interface ShopifyLineItem {
   variant_title: string | null
 }
 
+export interface ShopifyDiscountCode {
+  code: string
+  amount: string
+  type: string
+}
+
+export interface ShopifyShippingLine {
+  price: string
+}
+
 export interface ShopifyOrder {
   id: number
   order_number: number
   email: string | null
   total_price: string
   subtotal_price: string
+  total_tax: string
+  total_discounts: string
+  shipping_lines: ShopifyShippingLine[]
+  discount_codes: ShopifyDiscountCode[]
   financial_status: string
   fulfillment_status: string | null
   line_items: ShopifyLineItem[]
@@ -304,14 +318,19 @@ export async function syncShopifyData(db: Database.Database): Promise<SyncResult
 
     const upsertOrder = db.prepare(`
       INSERT INTO shopify_orders
-        (shopify_id, order_number, email, total_price, subtotal_price, financial_status,
+        (shopify_id, order_number, email, total_price, subtotal_price, total_tax,
+         total_discounts, total_shipping, discount_codes, financial_status,
          fulfillment_status, line_items, created_at, processed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(shopify_id) DO UPDATE SET
         order_number = excluded.order_number,
         email = excluded.email,
         total_price = excluded.total_price,
         subtotal_price = excluded.subtotal_price,
+        total_tax = excluded.total_tax,
+        total_discounts = excluded.total_discounts,
+        total_shipping = excluded.total_shipping,
+        discount_codes = excluded.discount_codes,
         financial_status = excluded.financial_status,
         fulfillment_status = excluded.fulfillment_status,
         line_items = excluded.line_items,
@@ -322,9 +341,14 @@ export async function syncShopifyData(db: Database.Database): Promise<SyncResult
 
     db.transaction(() => {
       for (const o of orders) {
+        const totalShipping = (o.shipping_lines ?? []).reduce(
+          (sum, s) => sum + parseFloat(s.price ?? '0'), 0
+        )
         upsertOrder.run(
           String(o.id), o.order_number, o.email ?? null,
           parseFloat(o.total_price), parseFloat(o.subtotal_price),
+          parseFloat(o.total_tax ?? '0'), parseFloat(o.total_discounts ?? '0'),
+          totalShipping, JSON.stringify(o.discount_codes ?? []),
           o.financial_status, o.fulfillment_status ?? null,
           JSON.stringify(o.line_items), o.created_at, o.processed_at ?? null,
         )

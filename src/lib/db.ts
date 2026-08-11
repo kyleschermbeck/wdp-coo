@@ -365,6 +365,16 @@ function runMigrations(db: Database.Database) {
       synced_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`)
   } catch {}
+  // Klaviyo campaigns: per-campaign engagement + revenue metrics
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN recipients INTEGER`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN opens INTEGER`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN unique_opens INTEGER`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN clicks INTEGER`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN unique_clicks INTEGER`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN revenue REAL`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN unsubscribes INTEGER`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN open_rate REAL`) } catch {}
+  try { db.exec(`ALTER TABLE klaviyo_campaigns ADD COLUMN click_rate REAL`) } catch {}
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS klaviyo_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -437,6 +447,27 @@ function runMigrations(db: Database.Database) {
       connected_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`)
   } catch {}
+  // Meta Ads: add app credentials + token expiry for long-lived token exchange
+  try { db.exec(`ALTER TABLE meta_ads_config ADD COLUMN app_id TEXT`) } catch {}
+  try { db.exec(`ALTER TABLE meta_ads_config ADD COLUMN app_secret TEXT`) } catch {}
+  try { db.exec(`ALTER TABLE meta_ads_config ADD COLUMN token_expiry INTEGER`) } catch {}
+  try {
+    // Drop the old schema (service_account_json) if it exists before OAuth2 columns were added
+    const hasOAuth = db.prepare(`SELECT 1 FROM pragma_table_info('google_analytics_config') WHERE name='client_id'`).get()
+    if (!hasOAuth) db.exec(`DROP TABLE IF EXISTS google_analytics_config`)
+    db.exec(`CREATE TABLE IF NOT EXISTS google_analytics_config (
+      id INTEGER PRIMARY KEY,
+      property_id TEXT,
+      measurement_id TEXT,
+      client_id TEXT NOT NULL,
+      client_secret TEXT NOT NULL,
+      access_token TEXT,
+      refresh_token TEXT,
+      token_expiry INTEGER,
+      property_name TEXT,
+      connected_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`)
+  } catch {}
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS supplies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -480,6 +511,11 @@ function runMigrations(db: Database.Database) {
       accent_color TEXT
     )`)
   } catch {}
+  try { db.exec(`ALTER TABLE product_local ADD COLUMN cost_per_unit REAL`) } catch {}
+  try { db.exec(`ALTER TABLE shopify_orders ADD COLUMN total_tax REAL NOT NULL DEFAULT 0`) } catch {}
+  try { db.exec(`ALTER TABLE shopify_orders ADD COLUMN total_discounts REAL NOT NULL DEFAULT 0`) } catch {}
+  try { db.exec(`ALTER TABLE shopify_orders ADD COLUMN total_shipping REAL NOT NULL DEFAULT 0`) } catch {}
+  try { db.exec(`ALTER TABLE shopify_orders ADD COLUMN discount_codes TEXT`) } catch {}
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS settings_kv (
       key TEXT PRIMARY KEY,

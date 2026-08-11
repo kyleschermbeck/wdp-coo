@@ -31,6 +31,14 @@ interface TaskAttachment {
   created_at: string
 }
 
+interface KnowledgeDoc {
+  id: number
+  original_name: string
+  file_type: string
+  file_size: number
+  created_at: string
+}
+
 const CONTENT_MODES = [
   { id: 'Recipe Only',            label: 'Recipe Fields',          desc: 'Writes / improves ingredients, about, steps, tips' },
   { id: 'Blog Package',           label: 'Blog Package',           desc: 'Title, intro, body, FAQ, related recipes' },
@@ -140,6 +148,9 @@ export function TaskDetailDrawer({ task, onClose, onUpdate, onDelete, onSubtaskT
   const [generatingStatus, setGeneratingStatus] = useState('')
   const [attachments, setAttachments] = useState<TaskAttachment[]>([])
   const [expandedAttachment, setExpandedAttachment] = useState<number | null>(null)
+  const [taskDocs, setTaskDocs] = useState<KnowledgeDoc[]>([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -172,6 +183,10 @@ export function TaskDetailDrawer({ task, onClose, onUpdate, onDelete, onSubtaskT
     fetch(`/api/tasks/${task.id}/attachments`)
       .then(r => r.json())
       .then(data => setAttachments(Array.isArray(data) ? data : []))
+
+    fetch(`/api/documents?task_id=${task.id}`)
+      .then(r => r.json())
+      .then(data => setTaskDocs(Array.isArray(data) ? data : []))
 
     fetch(`/api/tasks/dependencies?task_id=${task.id}`)
       .then(r => r.json())
@@ -1168,6 +1183,69 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                   className={TEXTAREA_CLASS}
                   style={FONT}
                 />
+              </div>
+
+              {/* File attachments (Knowledge Base docs linked to this task) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className={LABEL} style={LABEL_STYLE}>Documents</label>
+                  <button
+                    onClick={() => docInputRef.current?.click()}
+                    disabled={uploadingDoc}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-ink/40 hover:text-blueberry transition-colors"
+                    style={FONT}
+                  >
+                    {uploadingDoc
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Upload className="w-3 h-3" />}
+                    Attach file
+                  </button>
+                  <input
+                    ref={docInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.txt,.md,.csv"
+                    className="hidden"
+                    onChange={async e => {
+                      if (!e.target.files || !task) return
+                      setUploadingDoc(true)
+                      for (const file of Array.from(e.target.files)) {
+                        const form = new FormData()
+                        form.append('file', file)
+                        form.append('task_id', String(task.id))
+                        const res = await fetch('/api/documents', { method: 'POST', body: form })
+                        if (res.ok) {
+                          const doc = await res.json()
+                          setTaskDocs(prev => [doc, ...prev])
+                        }
+                      }
+                      setUploadingDoc(false)
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+                {taskDocs.length > 0 && (
+                  <div className="space-y-1.5">
+                    {taskDocs.map(doc => (
+                      <div key={doc.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-oatmilk/60 border border-mushroom/60">
+                        <FileText className="w-3.5 h-3.5 text-blueberry/50 shrink-0" />
+                        <span className="flex-1 text-xs text-ink-dark truncate" style={FONT}>{doc.original_name}</span>
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
+                            setTaskDocs(prev => prev.filter(d => d.id !== doc.id))
+                          }}
+                          className="text-ink/20 hover:text-tomato transition-colors shrink-0"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {taskDocs.length === 0 && (
+                  <p className="text-[10px] text-ink/25 italic" style={FONT}>No files attached — click "Attach file" to add PDFs, Word docs, etc.</p>
+                )}
               </div>
 
               {/* Generated attachments */}

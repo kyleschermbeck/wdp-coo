@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { AlertTriangle, RefreshCw, Plus, X, ExternalLink, Pencil, Trash2 } from 'lucide-react'
+import { StatusRail } from '@/components/ui/StatusRail'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -347,14 +349,18 @@ function ProductPanel({
     }, 1200)
   }
 
-  // Auto-sync COGS + weight to Shopify whenever ingredients/packaging/labor changes (skips initial load)
+  // Auto-sync COGS to Shopify + save cost locally whenever ingredients/packaging/labor changes
+  // Weight is intentionally excluded — Shopify weight = shipping weight, inventory weight = spice weight
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!cogsInitialized.current) { cogsInitialized.current = true; return }
     syncCogs(totalCost)
-    if (variantId) {
-      patchShopify({ weight: totalWeightOz, weight_unit: 'oz', variant_id: variantId })
-    }
+    // Also persist locally so the COGS report reads the same value as shown here
+    fetch(`/api/inventory/product-details/${product.shopify_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cost_per_unit: totalCost }),
+    }).catch(() => {})
   }, [ingredients, packaging, laborCost])
 
   function scheduleSave(ing: IngredientRow[], pkg: Set<number>, labor: string, cogsForSync?: number) {
@@ -368,6 +374,7 @@ function ProductPanel({
           ingredients: ing.map(r => ({ supply_id: r.supply_id, tbsp: r.tbsp })),
           packaging: Array.from(pkg),
           labor_cost: parseFloat(labor) || 0,
+          cost_per_unit: cogsForSync ?? totalCost, // save computed cost locally for COGS reports
         }),
       }).finally(() => setSaving(false))
     }, 600)
@@ -1440,26 +1447,36 @@ function SuppliesTab({ supplies, onAdd, onUpdate, onDelete }: {
 
 function ProductCard({ product, displayQty, onClick }: { product: ShopifyProduct; displayQty: number; onClick: () => void }) {
   const accent = ACCENT_HEX[product.accent_color ?? 'sage'] ?? '#9BAE9A'
-  const isLow = product.status === 'active' && !product.is_bundle && displayQty < 2
+  const isActive = product.status === 'active' && !product.is_bundle
+  const isCritical = isActive && displayQty < 2
+  const isWarning  = isActive && !isCritical && displayQty < product.reorder_threshold
+
+  const borderColor = isCritical ? '#C94040' : isWarning ? '#B87816' : 'rgba(216,210,198,0.6)'
+  const stockColor  = isCritical ? '#C94040' : isWarning ? '#B87816' : '#3A8A5A'
 
   return (
     <div onClick={onClick} style={{
       background: '#fff', borderRadius: 10,
-      border: `1px solid ${isLow ? 'rgba(194,122,84,0.4)' : 'rgba(216,210,198,0.6)'}`,
+      border: `1px solid ${borderColor}`,
+      borderLeft: isCritical ? '3px solid #C94040' : isWarning ? '3px solid #B87816' : `1px solid ${borderColor}`,
       display: 'flex', overflow: 'hidden', cursor: 'pointer',
+      transition: 'box-shadow 0.15s',
     }}>
-      <div style={{ width: 5, flexShrink: 0, background: accent }} />
+      {/* accent rail — only show when not exception (exception uses left border) */}
+      {!isCritical && !isWarning && <div style={{ width: 4, flexShrink: 0, background: accent }} />}
       <div style={{ flex: 1, padding: '14px 16px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <p style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C', margin: 0, ...FONT }}>{product.title}</p>
           {!!product.is_bundle && (
             <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#78B7C5', background: 'rgba(120,183,197,0.14)', padding: '2px 7px', borderRadius: 999, flexShrink: 0, ...FONT }}>Bundle</span>
           )}
+          {isCritical && <StatusBadge severity="critical" label="Critical" size="sm" dot />}
+          {isWarning  && <StatusBadge severity="warning"  label="Low stock" size="sm" dot />}
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 22 }}>
           <div>
             <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(116,116,116,0.6)', margin: '0 0 2px', ...FONT }}>Stock</p>
-            <p style={{ fontSize: 19, fontWeight: 600, margin: 0, color: isLow ? '#C27A54' : '#5c8a3f', ...FONT }}>{displayQty}</p>
+            <p style={{ fontSize: 19, fontWeight: 700, margin: 0, color: stockColor, ...FONT }}>{displayQty}</p>
           </div>
           {product.price && (
             <div>
@@ -1471,9 +1488,6 @@ function ProductCard({ product, displayQty, onClick }: { product: ShopifyProduct
             <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(116,116,116,0.6)', margin: '0 0 2px', ...FONT }}>Restock at</p>
             <p style={{ fontSize: 13.5, margin: 0, color: 'rgba(116,116,116,0.7)', ...FONT }}>{product.reorder_threshold}</p>
           </div>
-          {isLow && (
-            <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#C27A54', background: 'rgba(194,122,84,0.14)', padding: '3px 9px', borderRadius: 999, ...FONT }}>Restock</span>
-          )}
         </div>
       </div>
     </div>
@@ -1528,7 +1542,9 @@ export default function InventoryPage() {
   const activeBundles = products.filter(p => p.status === 'active' && !!p.is_bundle)
   const active = [...activeNonBundle, ...activeBundles]
   const draft = products.filter(p => p.status === 'draft')
-  const lowCount = products.filter(p => p.status === 'active' && !p.is_bundle && getDisplayQty(p) < 2).length
+  const criticalProducts = products.filter(p => p.status === 'active' && !p.is_bundle && getDisplayQty(p) < 2)
+  const warningProducts  = products.filter(p => p.status === 'active' && !p.is_bundle && getDisplayQty(p) >= 2 && getDisplayQty(p) < p.reorder_threshold)
+  const lowCount = criticalProducts.length + warningProducts.length
 
   const syncedLabel = shopifyStatus?.last_synced_at
     ? new Date(shopifyStatus.last_synced_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -1576,14 +1592,31 @@ export default function InventoryPage() {
           </div>
         </div>
 
+        {/* Exception rail — critical first, then warning */}
+        {criticalProducts.length > 0 && (
+          <StatusRail
+            severity="critical"
+            message={`${criticalProducts.length} product${criticalProducts.length > 1 ? 's' : ''} out of stock`}
+            items={criticalProducts.map(p => ({
+              label: `${p.title} (${getDisplayQty(p)})`,
+              onClick: () => setSelectedProduct(p),
+            }))}
+          />
+        )}
+        {warningProducts.length > 0 && (
+          <StatusRail
+            severity="warning"
+            message={`${warningProducts.length} product${warningProducts.length > 1 ? 's' : ''} below reorder threshold`}
+            items={warningProducts.map(p => ({
+              label: `${p.title} (${getDisplayQty(p)})`,
+              onClick: () => setSelectedProduct(p),
+            }))}
+          />
+        )}
+
         {/* Status bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 12.5, color: 'rgba(116,116,116,0.7)', margin: 0, ...FONT }}>{active.length} active · {draft.length} draft</p>
-          {lowCount > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#C27A54', background: 'rgba(194,122,84,0.14)', border: '1px solid rgba(194,122,84,0.3)', padding: '4px 12px', borderRadius: 999, ...FONT }}>
-              <AlertTriangle size={12} /> {lowCount} low stock
-            </span>
-          )}
           <span style={{ fontSize: 12, color: 'rgba(116,116,116,0.5)', ...FONT }}>
             Synced from Shopify · {syncedLabel}
           </span>

@@ -60,6 +60,13 @@ interface ShopifyOrder {
   created_at: string
   total_price: string
   financial_status: string
+  line_items: string  // JSON array with product_id and quantity
+}
+
+interface BundleComponent {
+  bundle_shopify_id: string
+  component_shopify_id: string
+  quantity: number
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -123,7 +130,10 @@ function weekLabel(date: Date): string {
 }
 
 // Build 5 weekly revenue buckets from orders
-function buildWeeklyRevenue(orders: ShopifyOrder[]): { label: string; revenue: number; units: number }[] {
+function buildWeeklyRevenue(
+  orders: ShopifyOrder[],
+  bundleJarsMap: Map<string, number>,
+): { label: string; revenue: number; units: number }[] {
   const now = new Date()
   const weeks: { label: string; revenue: number; units: number }[] = []
   for (let i = 4; i >= 0; i--) {
@@ -132,13 +142,23 @@ function buildWeeklyRevenue(orders: ShopifyOrder[]): { label: string; revenue: n
     const start = new Date(end)
     start.setDate(start.getDate() - 7)
     const label = i === 0 ? weekLabel(start) + '*' : weekLabel(start)
-    const revenue = orders
-      .filter((o) => {
-        const d = new Date(o.created_at)
-        return d >= start && d < end
-      })
-      .reduce((s, o) => s + parseFloat(o.total_price), 0)
-    weeks.push({ label, revenue, units: 0 })
+    const weekOrders = orders.filter((o) => {
+      const d = new Date(o.created_at)
+      return d >= start && d < end && o.financial_status !== 'voided' && o.financial_status !== 'refunded'
+    })
+    const revenue = weekOrders.reduce((s, o) => s + parseFloat(o.total_price), 0)
+    let units = 0
+    for (const o of weekOrders) {
+      try {
+        const items = JSON.parse(o.line_items) as Array<{ product_id?: number | string; quantity: number }>
+        for (const item of items) {
+          const pid = item.product_id != null ? String(item.product_id) : null
+          const jars = pid ? (bundleJarsMap.get(pid) ?? 1) : 1
+          units += jars * item.quantity
+        }
+      } catch { /* skip malformed */ }
+    }
+    weeks.push({ label, revenue, units })
   }
   return weeks
 }
@@ -242,6 +262,7 @@ export default function DashboardPage() {
   const [inventory, setInventory] = useState<InventoryRow[]>([])
   const [events, setEvents] = useState<MarketingEvent[]>([])
   const [orders, setOrders] = useState<ShopifyOrder[]>([])
+  const [bundleComponents, setBundleComponents] = useState<BundleComponent[]>([])
   const [projects, setProjects] = useState<{ id: number; status: string }[]>([])
   const [checkedTaskIds, setCheckedTaskIds] = useState<Set<number>>(new Set())
   const [checkedSubtaskIds, setCheckedSubtaskIds] = useState<Set<number>>(new Set())
@@ -280,13 +301,14 @@ export default function DashboardPage() {
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
         const nextMonthStr = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`
 
-        const [tasksRes, subtasksRes, invRes, eventsRes, eventsNextRes, ordersRes, projRes, igRes, klaviyoRes, agentsRes] = await Promise.allSettled([
+        const [tasksRes, subtasksRes, invRes, eventsRes, eventsNextRes, ordersRes, bundleCompRes, projRes, igRes, klaviyoRes, agentsRes] = await Promise.allSettled([
           fetch('/api/tasks').then((r) => r.json()),
           fetch('/api/subtasks').then((r) => r.json()),
           fetch('/api/inventory').then((r) => r.json()),
           fetch(`/api/marketing/events?month=${thisMonth}`).then((r) => r.json()),
           fetch(`/api/marketing/events?month=${nextMonthStr}`).then((r) => r.json()),
           fetch('/api/shopify/orders?limit=250').then((r) => r.json()),
+          fetch('/api/inventory/bundle-components').then((r) => r.json()),
           fetch('/api/projects').then((r) => r.json()),
           fetch('/api/instagram/analytics').then((r) => r.json()),
           fetch('/api/klaviyo/data').then((r) => r.json()),
@@ -308,6 +330,7 @@ export default function DashboardPage() {
         if (eventsNextRes.status === 'fulfilled' && Array.isArray(eventsNextRes.value)) allEvents.push(...eventsNextRes.value)
         setEvents(allEvents)
         if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) setOrders(ordersRes.value)
+        if (bundleCompRes.status === 'fulfilled' && Array.isArray(bundleCompRes.value)) setBundleComponents(bundleCompRes.value)
         if (projRes.status === 'fulfilled' && Array.isArray(projRes.value)) setProjects(projRes.value)
 
         // Audience metrics
@@ -441,7 +464,11 @@ export default function DashboardPage() {
     return d >= ago30
   }).length
 
-  const weeklyRevenue = buildWeeklyRevenue(orders)
+  const bundleJarsMap = new Map<string, number>()
+  for (const c of bundleComponents) {
+    bundleJarsMap.set(c.bundle_shopify_id, (bundleJarsMap.get(c.bundle_shopify_id) ?? 0) + (c.quantity || 1))
+  }
+  const weeklyRevenue = buildWeeklyRevenue(orders, bundleJarsMap)
 
   const today = new Date().toISOString().slice(0, 10)
   const upcomingEvents = events

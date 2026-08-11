@@ -37,6 +37,8 @@ const BEHAVIOR_INSTRUCTIONS = `
 **Write actions**: Before calling update_task or create_task, always describe exactly what you're about to do and ask for confirmation: "I'll mark 'Task Title' as done — go ahead?" Only call the write tool after Kyle confirms. If they say something like "yes", "do it", "go ahead", or "yep", that counts.
 
 **After saving or updating**: Briefly confirm what you did — "Done, saved." or "Updated — marked as in progress." Keep it short.
+
+**Knowledge Base (search_docs)**: You have a search_docs tool that searches uploaded business documents (PDFs, guides, pricing sheets, brand guidelines, SOPs, etc.). Use it proactively — do NOT ask Kyle to upload something if the topic might already be covered in a document. Instead, call search_docs first, then answer based on what you find. If nothing is found, then let Kyle know the doc isn't in the knowledge base yet.
 `
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
@@ -183,6 +185,17 @@ const TOOLS: Anthropic.Tool[] = [
         memory_id: { type: 'number', description: 'The ID of the memory to delete' },
       },
       required: ['memory_id'],
+    },
+  },
+  {
+    name: 'search_docs',
+    description: 'Search the Knowledge Base for relevant information from uploaded documents (PDFs, Word docs, guides, etc.). Use this whenever a question might be answered by a document Kyle has uploaded — pricing sheets, wholesale guides, brand guidelines, SOPs, etc.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Keywords to search for in the documents' },
+      },
+      required: ['query'],
     },
   },
 ]
@@ -350,6 +363,24 @@ function executeTool(
       db.prepare('DELETE FROM agent_memories WHERE id = ? AND agent_id = ?').run(memory_id, agentId)
       return { deleted: true, memory_id }
     }
+    case 'search_docs': {
+      const { query } = input as { query: string }
+      try {
+        const results = db.prepare(`
+          SELECT d.id, d.original_name, d.task_id,
+                 snippet(documents_fts, 0, '**', '**', '…', 48) as excerpt
+          FROM documents_fts
+          JOIN documents d ON d.id = documents_fts.rowid
+          WHERE documents_fts MATCH ?
+          ORDER BY rank
+          LIMIT 4
+        `).all(query) as { id: number; original_name: string; task_id: number | null; excerpt: string }[]
+        if (results.length === 0) return { found: false, message: 'No documents matched that query.' }
+        return { found: true, results: results.map(r => ({ document: r.original_name, excerpt: r.excerpt })) }
+      } catch {
+        return { found: false, message: 'No documents in knowledge base yet.' }
+      }
+    }
     default:
       return { error: `Unknown tool: ${name}` }
   }
@@ -358,7 +389,11 @@ function executeTool(
 // ─── Route handler ───────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const { agent_id, messages } = await req.json() as { agent_id: number; messages: Message[] }
+  const { agent_id, messages, image } = await req.json() as {
+    agent_id: number
+    messages: Message[]
+    image?: { data: string; media_type: string }
+  }
 
   const db = getDb()
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agent_id) as Agent | undefined
@@ -372,8 +407,27 @@ export async function POST(req: NextRequest) {
     ? `\n\n## What you remember about Kyle and WDP\n${memories.map(m => `- **${m.topic}** (id:${m.id}): ${m.content}`).join('\n')}`
     : ''
 
+  // Pull brand/tone context from all knowledge base documents
+  let brandSection = ''
+  try {
+    const brandDocs = db.prepare(`
+      SELECT original_name, content_text
+      FROM documents
+      WHERE content_text IS NOT NULL AND length(content_text) > 50
+      ORDER BY created_at DESC
+      LIMIT 5
+    `).all() as { original_name: string; content_text: string }[]
+
+    if (brandDocs.length > 0) {
+      const docContext = brandDocs.map(d =>
+        `### ${d.original_name}\n${d.content_text.slice(0, 3000)}${d.content_text.length > 3000 ? '\n…(truncated)' : ''}`
+      ).join('\n\n')
+      brandSection = `\n\n## Knowledge Base — Brand & Business Documents\nThe following documents have been uploaded by Kyle and define WDP's brand voice, style, and business context. Apply this knowledge to all responses — use the tone, terminology, and positioning described here.\n\n${docContext}`
+    }
+  } catch { /* no documents table yet */ }
+
   const basePrompt = agent?.system_prompt || 'You are a helpful assistant for Weeknight Dinner Party.'
-  const systemPrompt = basePrompt + memorySection + BEHAVIOR_INSTRUCTIONS
+  const systemPrompt = basePrompt + brandSection + memorySection + BEHAVIOR_INSTRUCTIONS
 
   const model = agent?.model || 'claude-sonnet-4-6'
   const apiKey = getApiKey()
@@ -384,7 +438,26 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       try {
         type MsgParam = Anthropic.MessageParam
-        let loopMessages: MsgParam[] = messages.map(m => ({ role: m.role, content: m.content }))
+        // If an image was attached, embed it as a vision block on the last user message
+        let loopMessages: MsgParam[] = messages.map((m, idx) => {
+          if (image && idx === messages.length - 1 && m.role === 'user') {
+            return {
+              role: 'user' as const,
+              content: [
+                {
+                  type: 'image' as const,
+                  source: {
+                    type: 'base64' as const,
+                    media_type: image.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                    data: image.data,
+                  },
+                },
+                { type: 'text' as const, text: m.content || 'Please review this image.' },
+              ],
+            }
+          }
+          return { role: m.role, content: m.content }
+        })
 
         for (let round = 0; round < 6; round++) {
           const stream = client.messages.stream({

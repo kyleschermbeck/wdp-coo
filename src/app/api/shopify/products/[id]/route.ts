@@ -121,7 +121,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  // ── Inventory item cost (COGS) → Shopify inventory items API ─────────────
+  // ── Inventory item cost (COGS) → Shopify + local product_local ───────────
   if (body.inventory_item_cost !== undefined && body.inventory_item_id) {
     try {
       const { store_url, access_token } = config
@@ -133,6 +133,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!res.ok) throw new Error(`inventory item cost update failed (${res.status})`)
     } catch (err) {
       errors.push(`cost: ${(err as Error).message}`)
+    }
+    // Always save cost locally so COGS calculations match the inventory page exactly
+    const costNum = parseFloat(body.inventory_item_cost)
+    if (!isNaN(costNum)) {
+      db.prepare(`
+        INSERT INTO product_local (shopify_product_id, cost_per_unit)
+        VALUES (?, ?)
+        ON CONFLICT(shopify_product_id) DO UPDATE SET cost_per_unit = excluded.cost_per_unit
+      `).run(id, costNum)
     }
   }
 

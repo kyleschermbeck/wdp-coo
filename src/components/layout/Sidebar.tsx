@@ -14,6 +14,8 @@ import {
   Settings,
   ChevronRight,
   BarChart2,
+  FlaskConical,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlobalSearch } from './GlobalSearch'
@@ -34,6 +36,22 @@ const nav = [
     color: 'sage',
     activeColor: 'bg-sage-light text-ink-dark',
     dotColor: 'bg-sage',
+  },
+  {
+    label: 'Recipe Lab',
+    href: '/recipes',
+    icon: FlaskConical,
+    color: 'terracotta',
+    activeColor: 'bg-terracotta-light text-ink-dark',
+    dotColor: 'bg-terracotta',
+  },
+  {
+    label: 'Knowledge Base',
+    href: '/knowledge',
+    icon: BookOpen,
+    color: 'blueberry',
+    activeColor: 'bg-blueberry-light text-ink-dark',
+    dotColor: 'bg-blueberry',
   },
   {
     label: 'Financials',

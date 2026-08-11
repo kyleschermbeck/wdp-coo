@@ -36,19 +36,27 @@ export async function GET() {
     let ingredientCost = 0
     for (const ing of ingredients) {
       if (!ing.package_cost || !ing.package_weight || !ing.oz_per_tbsp) continue
-      const totalOz = ing.package_weight / 28.3495
+      // package_weight is stored in lbs — convert to oz
+      const totalOz = ing.package_weight * 16
       const ozUsed = (ing.tbsp ?? 0) * (ing.oz_per_tbsp ?? 0)
       ingredientCost += (ing.package_cost / (totalOz || 1)) * ozUsed
     }
 
     // Packaging cost
     const packaging = db.prepare(`
-      SELECT s.package_cost
+      SELECT s.package_cost, s.total_servings
       FROM product_packaging pp
       JOIN supplies s ON s.id = pp.supply_id
       WHERE pp.shopify_product_id = ?
-    `).all(product.shopify_id) as Array<{ package_cost: number | null }>
-    const packagingCost = packaging.reduce((sum, p) => sum + (p.package_cost ?? 0), 0)
+    `).all(product.shopify_id) as Array<{ package_cost: number | null; total_servings: number | null }>
+    // Divide by total_servings to get per-unit cost (package_cost is case/bulk price)
+    const packagingCost = packaging.reduce((sum, p) => {
+      if (!p.package_cost) return sum
+      const perUnit = (p.total_servings && p.total_servings > 0)
+        ? p.package_cost / p.total_servings
+        : p.package_cost
+      return sum + perUnit
+    }, 0)
 
     // Labor cost
     const local = db.prepare('SELECT labor_cost FROM product_local WHERE shopify_product_id = ?').get(product.shopify_id) as
