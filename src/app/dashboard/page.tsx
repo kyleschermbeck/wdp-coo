@@ -7,6 +7,7 @@ import { marked } from 'marked'
 import { TaskDetailDrawer } from '@/components/projects/TaskDetailDrawer'
 import { SubtaskDetailDrawer } from '@/components/projects/SubtaskDetailDrawer'
 import type { Task as LibTask, Subtask as LibSubtask } from '@/lib/types'
+import { StatusRail } from '@/components/ui/StatusRail'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -448,6 +449,8 @@ export default function DashboardPage() {
     .filter((r) => r.shopify_qty <= r.reorder_threshold)
     .slice(0, 5)
 
+  const criticalStockItems = inventory.filter((r) => r.shopify_qty < 2)
+
   const activeProjectCount = projects.filter((p) => p.status !== 'completed' && p.status !== 'archived').length
 
   const revenue30d = orders.reduce((s, o) => {
@@ -574,6 +577,16 @@ export default function DashboardPage() {
         Everything running the business tonight — inventory, revenue, the projects moving, and what your agents caught while you weren&apos;t looking.
       </p>
 
+      {/* ── Exception Rails ── */}
+      {criticalStockItems.length > 0 && (
+        <StatusRail
+          severity="critical"
+          message={`${criticalStockItems.length} product${criticalStockItems.length > 1 ? 's' : ''} out of stock`}
+          items={criticalStockItems.map(r => ({ label: r.title }))}
+          onViewAll={() => router.push('/inventory')}
+        />
+      )}
+
       {/* ── Morning Brief + KPI Row ── */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 28, alignItems: 'flex-start' }}>
 
@@ -620,17 +633,29 @@ export default function DashboardPage() {
 
         {/* KPI Cards — 2/5 when brief showing, full width otherwise */}
         <div ref={kpiColRef} style={{ flex: (brief || briefLoading) ? 2 : 1, minWidth: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start' }}>
-          {kpis.map((k) => (
-            <div key={k.label} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '16px 16px 14px' }}>
-              <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.7)', margin: '0 0 6px' }}>
-                {k.label}
-              </p>
-              <p style={{ fontFamily: "'Jost', sans-serif", fontSize: 22, fontWeight: 600, color: '#2C2C2C', margin: '0 0 4px' }}>
-                {k.value}
-              </p>
-              <p style={{ fontSize: 12, color: k.subColor, margin: 0, fontWeight: 600 }}>{k.sub}</p>
-            </div>
-          ))}
+          {kpis.map((k) => {
+            const isCriticalKpi = k.label === 'Low Stock Alerts' && lowStockItems.length > 0
+            return (
+              <div
+                key={k.label}
+                style={{
+                  background: '#fff',
+                  border: `1px solid ${isCriticalKpi ? '#C94040' : 'rgba(216,210,198,0.6)'}`,
+                  borderLeft: isCriticalKpi ? '3px solid #C94040' : '1px solid rgba(216,210,198,0.6)',
+                  borderRadius: 12,
+                  padding: '16px 16px 14px',
+                }}
+              >
+                <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.7)', margin: '0 0 6px' }}>
+                  {k.label}
+                </p>
+                <p style={{ fontFamily: "'Jost', sans-serif", fontSize: 22, fontWeight: 600, color: isCriticalKpi ? '#C94040' : '#2C2C2C', margin: '0 0 4px' }}>
+                  {k.value}
+                </p>
+                <p style={{ fontSize: 12, color: k.subColor, margin: 0, fontWeight: 600 }}>{k.sub}</p>
+              </div>
+            )
+          })}
         </div>
 
       </div>
