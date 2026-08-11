@@ -201,78 +201,443 @@ function fmtPct(n: number | undefined): string {
 
 interface MetaAdsSummary {
   spend: number; reach: number; impressions: number; clicks: number
-  ctr: number; cpm: number; cpc: number; purchases: number
-  purchase_value: number; roas: number
+  ctr: number; cpm: number; cpc: number; frequency: number
+  purchases: number; purchase_value: number; roas: number
+  add_to_carts: number; checkouts: number; cost_per_purchase: number
 }
 
 interface MetaAdsCampaign {
   id: string; name: string; status: string; objective?: string
   spend: number; reach: number; impressions: number; clicks: number
-  ctr: number; purchases: number; purchase_value: number; roas: number
+  ctr: number; frequency: number; purchases: number; purchase_value: number
+  add_to_carts: number; checkouts: number; roas: number; cost_per_purchase: number
+}
+
+interface MetaAdsAd {
+  ad_id: string; ad_name: string; campaign_name: string; thumbnail_url?: string
+  spend: number; reach: number; impressions: number; clicks: number
+  ctr: number; frequency: number; purchases: number; purchase_value: number
+  add_to_carts: number; checkouts: number; roas: number; cost_per_purchase: number
 }
 
 interface MetaAdsAnalytics {
   summary: MetaAdsSummary
   campaigns: MetaAdsCampaign[]
+  ads: MetaAdsAd[]
   trend: Array<{ date: string; spend: number; reach: number; impressions: number }>
   account_name: string | null
   days: number
 }
 
-function MetaAdsConnectForm({ onConnected }: { onConnected: () => void }) {
-  const [token, setToken] = useState('')
-  const [accountId, setAccountId] = useState('')
-  const [saving, setSaving] = useState(false)
+// ─── Google Analytics ─────────────────────────────────────────────────────────
+
+interface GASummary {
+  sessions: number; newUsers: number; totalUsers: number; pageViews: number
+  bounceRate: number; avgSessionDuration: number; avgSessionDurationFmt: string
+  conversions: number; revenue: number
+}
+interface GASource { channel: string; sessions: number; newUsers: number; pct: number }
+interface GAPage { path: string; title: string; views: number; avgDurationFmt: string }
+interface GADevice { category: string; sessions: number; pct: number }
+interface GAData {
+  summary: GASummary
+  sources: GASource[]
+  pages: GAPage[]
+  trend: Array<{ date: string; sessions: number; newUsers: number }>
+  devices: GADevice[]
+  property_name: string | null
+  days: number
+}
+
+function GoogleAnalyticsCard() {
+  const FONT_S = { fontFamily: "'Jost', system-ui, sans-serif" }
+  const [status, setStatus] = useState<{ connected: boolean; property_name?: string | null } | null>(null)
+  const [data, setData] = useState<GAData | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState(false)
+  const [days, setDays] = useState(30)
+
+  // Connect form state — OAuth2 flow
+  const [propertyId, setPropertyId] = useState('')
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  function loadData(d = days) {
+    setLoading(true); setError(null)
+    fetch(`/api/google-analytics/data?days=${d}`)
+      .then(r => r.json())
+      .then((d: GAData & { error?: string }) => {
+        if (d.error) { setError(d.error); setData(null) }
+        else setData(d)
+      })
+      .catch(() => setError('Failed to load analytics'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    // Check for OAuth callback result in URL params
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('ga_connected') === '1') {
+      window.history.replaceState({}, '', '/marketing')
+    }
+    if (params.get('ga_error')) {
+      setError(`Google auth error: ${params.get('ga_error')}`)
+      window.history.replaceState({}, '', '/marketing')
+    }
+
+    fetch('/api/google-analytics/status')
+      .then(r => r.json())
+      .then((s: { connected: boolean; property_name?: string }) => {
+        setStatus(s)
+        if (s.connected) loadData()
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (status?.connected) loadData(days)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days])
+
+  // Auto-parse JSON credentials pasted into the form
+  function handleJsonPaste(raw: string) {
+    try {
+      const parsed = JSON.parse(raw) as { web?: { client_id?: string; client_secret?: string }; installed?: { client_id?: string; client_secret?: string }; client_id?: string; client_secret?: string }
+      const creds = parsed.web ?? parsed.installed ?? parsed
+      if (creds.client_id) setClientId(creds.client_id)
+      if (creds.client_secret) setClientSecret(creds.client_secret)
+    } catch { /* not JSON, ignore */ }
+  }
+
+  async function handleConnect(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true); setSaveError(null)
+    const res = await fetch('/api/google-analytics/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        property_id: propertyId.trim(),
+        measurement_id: 'G-6X8DB23243',
+      }),
+    })
+    const d = await res.json() as { auth_url?: string; error?: string }
+    setSaving(false)
+    if (!res.ok || d.error) { setSaveError(d.error ?? 'Failed to initiate connection'); return }
+    // Redirect to Google's OAuth consent screen
+    if (d.auth_url) window.location.href = d.auth_url
+  }
+
+  async function disconnect() {
+    await fetch('/api/google-analytics/connect', { method: 'DELETE' })
+    setStatus({ connected: false }); setData(null)
+  }
+
+  const CHANNEL_COLORS: Record<string, string> = {
+    'Organic Search': 'bg-thyme/10 text-thyme border-thyme/30',
+    'Direct': 'bg-blueberry/10 text-blueberry border-blueberry/30',
+    'Paid Social': 'bg-candy/10 text-candy border-candy/30',
+    'Organic Social': 'bg-candy/5 text-candy/70 border-candy/20',
+    'Email': 'bg-butter/30 text-ink border-mushroom/40',
+    'Referral': 'bg-sage/10 text-sage border-sage/30',
+    'Paid Search': 'bg-terracotta/10 text-terracotta border-terracotta/30',
+    'Unassigned': 'bg-oatmilk text-ink/50 border-mushroom/30',
+  }
+  const fmtN = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n)
+
+  return (
+    <div className="rounded-xl border border-mushroom/50 bg-white flex overflow-hidden col-span-2">
+      <div className="w-1 shrink-0 bg-[#E37400]" />
+      <div className="flex-1 p-5 min-w-0">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logos/googleanalytics.svg" alt="GA" className="w-5 h-5 object-contain"
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <span className="text-base font-semibold text-ink-dark" style={FONT_S}>Google Analytics</span>
+            {(data?.property_name ?? status?.property_name) && (
+              <span className="text-xs text-ink/40" style={FONT_S}>{data?.property_name ?? status?.property_name}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {status?.connected ? (
+              <>
+                <select value={days} onChange={e => setDays(Number(e.target.value))}
+                  className="text-xs border border-mushroom/50 rounded-lg px-2 py-1 bg-oatmilk/30 text-ink-dark outline-none cursor-pointer"
+                  style={FONT_S}>
+                  <option value={7}>Last 7 days</option>
+                  <option value={14}>Last 14 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                </select>
+                <button onClick={() => loadData(days)} disabled={loading}
+                  className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border border-mushroom/50 text-ink/50 hover:text-ink hover:border-mushroom transition-colors disabled:opacity-40 cursor-pointer"
+                  style={FONT_S}>
+                  <RefreshCw className={cn('w-2.5 h-2.5', loading && 'animate-spin')} />
+                  {loading ? 'Loading…' : 'Refresh'}
+                </button>
+                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-thyme/10 text-thyme border border-thyme/30" style={FONT_S}>Connected</span>
+                <button onClick={disconnect} className="text-[10px] text-ink/30 hover:text-ink/60 transition-colors cursor-pointer" style={FONT_S}>Disconnect</button>
+              </>
+            ) : (
+              <button onClick={() => setConnecting(v => !v)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-ink-dark text-cream hover:bg-ink transition-colors cursor-pointer"
+                style={FONT_S}>{connecting ? 'Cancel' : 'Connect'}</button>
+            )}
+          </div>
+        </div>
+
+        {/* Connect form — OAuth2 */}
+        {!status?.connected && connecting && (
+          <form onSubmit={handleConnect} className="space-y-3 mb-2">
+            {/* Step 1: one-time Google Cloud setup */}
+            <div className="rounded-lg bg-oatmilk/60 border border-mushroom/40 p-3.5 text-xs text-ink/60 space-y-1.5" style={FONT_S}>
+              <p className="font-semibold text-ink/80">One-time setup — add a redirect URI</p>
+              <p>In <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="text-blueberry underline">Google Cloud Console → Credentials</a>, open your OAuth 2.0 Client ID and add this to <strong>Authorized redirect URIs</strong>:</p>
+              <code className="block bg-white border border-mushroom/40 rounded px-2 py-1 text-ink/80 select-all">http://localhost:3000/api/google-analytics/callback</code>
+              <p className="mt-1">Also make sure <strong>Google Analytics Data API</strong> is enabled for your project.</p>
+            </div>
+
+            {/* Paste full JSON OR fill in manually */}
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 block mb-1" style={FONT_S}>Paste your client credentials JSON (auto-fills fields below)</label>
+              <textarea rows={2} placeholder='{"web":{"client_id":"…","client_secret":"…",…}}'
+                onChange={e => handleJsonPaste(e.target.value)}
+                className="w-full text-xs border border-mushroom/50 rounded-lg px-3 py-2 bg-white text-ink-dark outline-none focus:border-ink/30 resize-none"
+                style={{ fontFamily: 'monospace' }} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 block mb-1" style={FONT_S}>Client ID</label>
+                <input value={clientId} onChange={e => setClientId(e.target.value)} required
+                  placeholder="495905312167-….apps.googleusercontent.com"
+                  className="w-full text-xs border border-mushroom/50 rounded-lg px-3 py-2 bg-white text-ink-dark outline-none focus:border-ink/30"
+                  style={FONT_S} />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 block mb-1" style={FONT_S}>Client Secret</label>
+                <input value={clientSecret} onChange={e => setClientSecret(e.target.value)} required type="password"
+                  placeholder="GOCSPX-…"
+                  className="w-full text-xs border border-mushroom/50 rounded-lg px-3 py-2 bg-white text-ink-dark outline-none focus:border-ink/30"
+                  style={FONT_S} />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/50 block mb-1" style={FONT_S}>GA4 Property ID <span className="normal-case font-normal">(numeric — Admin → Property Settings, not the G- ID)</span></label>
+              <input value={propertyId} onChange={e => setPropertyId(e.target.value)} required
+                placeholder="e.g. 123456789"
+                className="w-full text-sm border border-mushroom/50 rounded-lg px-3 py-2 bg-white text-ink-dark outline-none focus:border-ink/30"
+                style={FONT_S} />
+            </div>
+
+            {saveError && <p className="text-xs text-terracotta" style={FONT_S}>{saveError}</p>}
+            <button type="submit" disabled={saving || !clientId || !clientSecret || !propertyId}
+              className="text-sm px-4 py-2 rounded-lg bg-ink-dark text-cream hover:bg-ink disabled:opacity-40 transition-colors cursor-pointer disabled:cursor-default"
+              style={FONT_S}>{saving ? 'Saving…' : 'Authorize with Google →'}</button>
+          </form>
+        )}
+
+        {/* Error from OAuth callback */}
+        {error && !status?.connected && (
+          <p className="text-xs text-terracotta mb-3" style={FONT_S}>{error}</p>
+        )}
+
+        {!status?.connected && !connecting && !error && (
+          <p className="text-sm text-ink-dark leading-relaxed" style={FONT_S}>
+            Connect Google Analytics to track sessions, traffic sources, top pages, and user behaviour across your site.
+          </p>
+        )}
+
+        {status?.connected && loading && (
+          <p className="text-sm text-ink/40 py-4" style={FONT_S}>Loading analytics…</p>
+        )}
+        {status?.connected && error && (
+          <p className="text-sm text-terracotta py-2" style={FONT_S}>{error}</p>
+        )}
+
+        {status?.connected && data && !loading && (
+          <div className="space-y-5">
+
+            {/* Summary KPIs */}
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'Sessions',    value: fmtN(data.summary.sessions) },
+                { label: 'New Users',   value: fmtN(data.summary.newUsers) },
+                { label: 'Page Views',  value: fmtN(data.summary.pageViews) },
+                { label: 'Avg Session', value: data.summary.avgSessionDurationFmt },
+              ].map(s => (
+                <div key={s.label} className="bg-oatmilk/40 rounded-lg px-3 py-2.5 text-center border border-mushroom/30">
+                  <p className="text-lg font-bold text-ink-dark leading-none" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>{s.value}</p>
+                  <p className="text-[10px] text-ink/50 mt-0.5 uppercase tracking-wide" style={FONT_S}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Secondary row */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Bounce Rate', value: `${data.summary.bounceRate.toFixed(1)}%` },
+                { label: 'Conversions', value: fmtN(data.summary.conversions) },
+                { label: 'Revenue',     value: data.summary.revenue > 0 ? `$${data.summary.revenue.toFixed(2)}` : '—' },
+              ].map(s => (
+                <div key={s.label} className="bg-white rounded-lg px-3 py-2 border border-mushroom/30 flex items-center justify-between">
+                  <span className="text-xs text-ink/50" style={FONT_S}>{s.label}</span>
+                  <span className="text-sm font-semibold text-ink-dark" style={FONT_S}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Traffic sources + devices */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-2" style={FONT_S}>Traffic Sources</p>
+                <div className="space-y-1.5">
+                  {data.sources.length === 0 && <p className="text-xs text-ink/40" style={FONT_S}>No data</p>}
+                  {data.sources.map(s => (
+                    <div key={s.channel} className="flex items-center gap-2">
+                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0', CHANNEL_COLORS[s.channel] ?? 'bg-oatmilk text-ink/50 border-mushroom/30')} style={FONT_S}>
+                        {s.channel}
+                      </span>
+                      <div className="flex-1 h-1.5 rounded-full bg-oatmilk/60 overflow-hidden">
+                        <div className="h-full rounded-full bg-ink/20" style={{ width: `${s.pct}%` }} />
+                      </div>
+                      <span className="text-xs text-ink/60 tabular-nums w-10 text-right shrink-0" style={FONT_S}>{fmtN(s.sessions)}</span>
+                      <span className="text-[10px] text-ink/30 tabular-nums w-7 text-right shrink-0" style={FONT_S}>{s.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-2" style={FONT_S}>Devices</p>
+                <div className="space-y-1.5">
+                  {data.devices.length === 0 && <p className="text-xs text-ink/40" style={FONT_S}>No data</p>}
+                  {data.devices.map(d => (
+                    <div key={d.category} className="flex items-center gap-2">
+                      <span className="text-xs text-ink/70 capitalize w-14 shrink-0" style={FONT_S}>{d.category}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-oatmilk/60 overflow-hidden">
+                        <div className="h-full rounded-full bg-[#E37400]/40" style={{ width: `${d.pct}%` }} />
+                      </div>
+                      <span className="text-xs text-ink/60 tabular-nums w-10 text-right shrink-0" style={FONT_S}>{fmtN(d.sessions)}</span>
+                      <span className="text-[10px] text-ink/30 tabular-nums w-7 text-right shrink-0" style={FONT_S}>{d.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Top pages */}
+            {data.pages.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-2" style={FONT_S}>Top Pages</p>
+                <div className="rounded-xl border border-mushroom/40 overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-oatmilk/40 border-b border-mushroom/30">
+                        {['Page', 'Views', 'Avg Time'].map(h => (
+                          <th key={h} className="px-3 py-2 text-left font-semibold text-ink/50 uppercase tracking-wider text-[10px]" style={FONT_S}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.pages.map((p, i) => (
+                        <tr key={p.path} className={cn('border-b border-mushroom/20 last:border-0', i % 2 === 0 ? 'bg-white' : 'bg-oatmilk/20')}>
+                          <td className="px-3 py-2 max-w-[280px]" style={FONT_S}>
+                            <p className="text-ink-dark font-medium truncate" title={p.path}>{p.path}</p>
+                            {p.title && p.title !== p.path && <p className="text-[10px] text-ink/40 truncate">{p.title}</p>}
+                          </td>
+                          <td className="px-3 py-2 text-ink/70 tabular-nums whitespace-nowrap" style={FONT_S}>{fmtN(p.views)}</td>
+                          <td className="px-3 py-2 text-ink/70 whitespace-nowrap" style={FONT_S}>{p.avgDurationFmt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MetaAdsConnectForm({ onConnected }: { onConnected: () => void }) {
+  const [token, setToken]       = useState('')
+  const [accountId, setAccountId] = useState('')
+  const [appId, setAppId]       = useState('')
+  const [appSecret, setAppSecret] = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [result, setResult]     = useState<{ token_exchanged?: boolean; token_expiry?: number | null } | null>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!token.trim() || !accountId.trim()) return
-    setSaving(true); setError(null)
+    setSaving(true); setError(null); setResult(null)
     const res = await fetch('/api/meta-ads/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_token: token.trim(), ad_account_id: accountId.trim() }),
+      body: JSON.stringify({
+        access_token: token.trim(),
+        ad_account_id: accountId.trim(),
+        ...(appId.trim() ? { app_id: appId.trim(), app_secret: appSecret.trim() } : {}),
+      }),
     })
-    const data = await res.json() as { ok?: boolean; error?: string }
+    const data = await res.json() as { ok?: boolean; error?: string; token_exchanged?: boolean; token_expiry?: number | null }
     if (!res.ok || data.error) { setError(data.error ?? 'Connection failed'); setSaving(false); return }
-    onConnected()
+    setResult({ token_exchanged: data.token_exchanged, token_expiry: data.token_expiry })
+    setTimeout(onConnected, 1200)
   }
 
   return (
     <form onSubmit={submit} className="space-y-3 mt-3">
       <p className="text-xs text-ink/50 leading-relaxed" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
-        Requires a Facebook User Access Token with <code className="bg-oatmilk px-1 rounded text-[10px]">ads_read</code> permission,
-        and your Ad Account ID from Meta Business Suite.
+        Requires a User Access Token with <code className="bg-oatmilk px-1 rounded text-[10px]">ads_read</code> permission.
+        Add your App credentials below to auto-exchange for a <strong>60-day token</strong> — otherwise the token expires in ~2 hours.
       </p>
       <div>
-        <label className="block text-xs text-ink/50 mb-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Access Token</label>
-        <input
-          value={token}
-          onChange={e => setToken(e.target.value)}
-          placeholder="EAAxxxxxxxxxxxxxxxx…"
-          className="w-full px-3 py-2 text-xs border border-mushroom/60 rounded-lg bg-oatmilk/30 text-ink-dark outline-none focus:ring-2 focus:ring-ink/15 placeholder:text-ink/30 font-mono"
-        />
+        <label className="block text-xs text-ink/50 mb-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Access Token <span className="text-terracotta">*</span></label>
+        <input value={token} onChange={e => setToken(e.target.value)} placeholder="EAAxxxxxxxxxxxxxxxx…"
+          className="w-full px-3 py-2 text-xs border border-mushroom/60 rounded-lg bg-oatmilk/30 text-ink-dark outline-none focus:ring-2 focus:ring-ink/15 placeholder:text-ink/30 font-mono" />
       </div>
       <div>
-        <label className="block text-xs text-ink/50 mb-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Ad Account ID</label>
-        <input
-          value={accountId}
-          onChange={e => setAccountId(e.target.value)}
-          placeholder="act_123456789 or 123456789"
-          className="w-full px-3 py-2 text-xs border border-mushroom/60 rounded-lg bg-oatmilk/30 text-ink-dark outline-none focus:ring-2 focus:ring-ink/15 placeholder:text-ink/30 font-mono"
-        />
-        <p className="text-[10px] text-ink/30 mt-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
-          Found in Meta Business Suite → Settings → Ad Accounts
-        </p>
+        <label className="block text-xs text-ink/50 mb-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Ad Account ID <span className="text-terracotta">*</span></label>
+        <input value={accountId} onChange={e => setAccountId(e.target.value)} placeholder="act_123456789 or 123456789"
+          className="w-full px-3 py-2 text-xs border border-mushroom/60 rounded-lg bg-oatmilk/30 text-ink-dark outline-none focus:ring-2 focus:ring-ink/15 placeholder:text-ink/30 font-mono" />
+        <p className="text-[10px] text-ink/30 mt-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Found in Meta Business Suite → Settings → Ad Accounts</p>
+      </div>
+      {/* App credentials for long-lived token */}
+      <div className="border border-mushroom/40 rounded-lg p-3 space-y-2 bg-oatmilk/20">
+        <p className="text-[10px] font-semibold text-ink/40 uppercase tracking-widest" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>App Credentials (recommended — for 60-day tokens)</p>
+        <div>
+          <label className="block text-xs text-ink/50 mb-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>App ID</label>
+          <input value={appId} onChange={e => setAppId(e.target.value)} placeholder="From Meta for Developers → Your App → Settings"
+            className="w-full px-3 py-2 text-xs border border-mushroom/60 rounded-lg bg-white text-ink-dark outline-none focus:ring-2 focus:ring-ink/15 placeholder:text-ink/30 font-mono" />
+        </div>
+        <div>
+          <label className="block text-xs text-ink/50 mb-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>App Secret</label>
+          <input value={appSecret} onChange={e => setAppSecret(e.target.value)} type="password" placeholder="••••••••••••••••"
+            className="w-full px-3 py-2 text-xs border border-mushroom/60 rounded-lg bg-white text-ink-dark outline-none focus:ring-2 focus:ring-ink/15 placeholder:text-ink/30 font-mono" />
+        </div>
       </div>
       {error && <p className="text-xs text-terracotta" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{error}</p>}
-      <button
-        type="submit"
-        disabled={saving || !token.trim() || !accountId.trim()}
+      {result?.token_exchanged && (
+        <p className="text-xs text-sage font-medium" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+          ✓ Exchanged for a long-lived token{result.token_expiry ? ` — expires ${new Date(result.token_expiry).toLocaleDateString()}` : ''}
+        </p>
+      )}
+      <button type="submit" disabled={saving || !token.trim() || !accountId.trim()}
         className="text-xs px-3 py-1.5 rounded-lg bg-ink-dark text-cream hover:bg-ink transition-colors cursor-pointer disabled:opacity-40"
-        style={{ fontFamily: "'Jost', system-ui, sans-serif" }}
-      >
+        style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
         {saving ? 'Connecting…' : 'Connect'}
       </button>
     </form>
@@ -285,6 +650,7 @@ function MetaAdsCard() {
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tokenExpired, setTokenExpired] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [days, setDays] = useState(30)
 
@@ -293,10 +659,11 @@ function MetaAdsCard() {
   }, [])
 
   function loadAnalytics() {
-    setLoading(true); setError(null)
+    setLoading(true); setError(null); setTokenExpired(false)
     fetch(`/api/meta-ads/analytics?days=${days}`)
       .then(r => r.json())
-      .then((d: MetaAdsAnalytics & { error?: string }) => {
+      .then((d: MetaAdsAnalytics & { error?: string; token_expired?: boolean; message?: string }) => {
+        if (d.token_expired) { setTokenExpired(true); setError(d.message ?? 'Token expired'); setLoading(false); return }
         if (d.error) { setError(d.error); setLoading(false); return }
         setAnalytics(d); setLoading(false)
       })
@@ -395,7 +762,19 @@ function MetaAdsCard() {
           <p className="text-sm text-ink/40 py-4" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Loading analytics…</p>
         )}
         {status?.connected && error && (
-          <p className="text-sm text-terracotta py-2" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{error}</p>
+          tokenExpired ? (
+            <div className="rounded-lg border border-terracotta/30 bg-terracotta/5 p-3 mt-2 space-y-2">
+              <p className="text-xs font-semibold text-terracotta" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>⚠ Access token expired</p>
+              <p className="text-xs text-ink/60 leading-relaxed" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{error}</p>
+              <button
+                onClick={() => setConnecting(true)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-terracotta text-white hover:bg-terracotta/90 cursor-pointer"
+                style={{ fontFamily: "'Jost', system-ui, sans-serif" }}
+              >Reconnect Meta Ads</button>
+            </div>
+          ) : (
+            <p className="text-sm text-terracotta py-2" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{error}</p>
+          )
         )}
 
         {status?.connected && analytics && !loading && (
@@ -417,13 +796,13 @@ function MetaAdsCard() {
               ))}
             </div>
 
-            {/* Secondary stats row */}
+            {/* Secondary stats */}
             <div className="grid grid-cols-4 gap-3">
               {[
-                { label: 'CTR',             value: fmtPct(analytics.summary.ctr) },
-                { label: 'CPM',             value: fmtCurrency(analytics.summary.cpm) },
-                { label: 'CPC',             value: fmtCurrency(analytics.summary.cpc) },
-                { label: 'Revenue',         value: fmtCurrency(analytics.summary.purchase_value) },
+                { label: 'CTR',               value: fmtPct(analytics.summary.ctr) },
+                { label: 'CPM',               value: fmtCurrency(analytics.summary.cpm) },
+                { label: 'CPC',               value: fmtCurrency(analytics.summary.cpc) },
+                { label: 'Frequency',         value: analytics.summary.frequency > 0 ? analytics.summary.frequency.toFixed(2) : '—' },
               ].map(s => (
                 <div key={s.label} className="bg-white rounded-lg px-3 py-2 border border-mushroom/30 flex items-center justify-between">
                   <span className="text-xs text-ink/50" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{s.label}</span>
@@ -432,35 +811,118 @@ function MetaAdsCard() {
               ))}
             </div>
 
+            {/* Conversion funnel */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-2" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Conversion Funnel</p>
+              <div className="flex items-stretch gap-0 rounded-xl border border-mushroom/40 overflow-hidden">
+                {[
+                  { label: 'Clicks',      value: fmtNum(analytics.summary.clicks),                    sub: 'link clicks' },
+                  { label: 'Add to Cart', value: fmtNum(analytics.summary.add_to_carts),              sub: 'added item' },
+                  { label: 'Checkout',    value: fmtNum(analytics.summary.checkouts),                 sub: 'started checkout' },
+                  { label: 'Purchases',   value: fmtNum(analytics.summary.purchases),                 sub: 'converted' },
+                  { label: 'Cost / Sale', value: analytics.summary.cost_per_purchase > 0 ? fmtCurrency(analytics.summary.cost_per_purchase) : '—', sub: 'per purchase' },
+                  { label: 'Revenue',     value: fmtCurrency(analytics.summary.purchase_value),       sub: 'from ads' },
+                ].map((s, idx, arr) => (
+                  <div key={s.label} className={cn('flex-1 px-3 py-2.5 text-center', idx < arr.length - 1 ? 'border-r border-mushroom/30' : '')}>
+                    <p className="text-sm font-bold text-ink-dark leading-none" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>{s.value}</p>
+                    <p className="text-[10px] font-semibold text-ink/50 mt-0.5 uppercase tracking-wide" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{s.label}</p>
+                    <p className="text-[9px] text-ink/30 mt-0.5" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{s.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Campaigns table */}
             {analytics.campaigns.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-2" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
                   Campaigns
                 </p>
-                <div className="rounded-xl border border-mushroom/40 overflow-hidden">
+                <div className="rounded-xl border border-mushroom/40 overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-oatmilk/40 border-b border-mushroom/30">
-                        {['Campaign', 'Status', 'Spend', 'ROAS', 'Reach', 'Clicks', 'CTR'].map(h => (
-                          <th key={h} className="px-3 py-2 text-left font-semibold text-ink/50 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{h}</th>
+                        {['Campaign', 'Status', 'Spend', 'ROAS', 'Reach', 'Freq', 'Clicks', 'CTR', 'Cart', 'Checkout', 'Purchases', 'Cost/Sale'].map(h => (
+                          <th key={h} className="px-3 py-2 text-left font-semibold text-ink/50 uppercase tracking-wider text-[10px] whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {analytics.campaigns.map((c, i) => (
                         <tr key={c.id} className={cn('border-b border-mushroom/20 last:border-0', i % 2 === 0 ? 'bg-white' : 'bg-oatmilk/20')}>
-                          <td className="px-3 py-2.5 text-ink-dark font-medium max-w-[180px] truncate" style={{ fontFamily: "'Jost', system-ui, sans-serif" }} title={c.name}>{c.name}</td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-2.5 text-ink-dark font-medium max-w-[160px] truncate whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }} title={c.name}>{c.name}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
                             <span className={cn('text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border', CAMPAIGN_STATUS_COLORS[c.status] ?? 'bg-oatmilk text-ink border-mushroom/40')} style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
                               {c.status.toLowerCase()}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-ink-dark" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtCurrency(c.spend)}</td>
-                          <td className="px-3 py-2.5 text-ink-dark font-medium" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{c.roas > 0 ? `${c.roas.toFixed(2)}×` : '—'}</td>
-                          <td className="px-3 py-2.5 text-ink/70" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(c.reach)}</td>
-                          <td className="px-3 py-2.5 text-ink/70" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(c.clicks)}</td>
-                          <td className="px-3 py-2.5 text-ink/70" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtPct(c.ctr)}</td>
+                          <td className="px-3 py-2.5 text-ink-dark whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtCurrency(c.spend)}</td>
+                          <td className="px-3 py-2.5 text-ink-dark font-medium whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{c.roas > 0 ? `${c.roas.toFixed(2)}×` : '—'}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(c.reach)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{c.frequency > 0 ? c.frequency.toFixed(2) : '—'}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(c.clicks)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtPct(c.ctr)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(c.add_to_carts)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(c.checkouts)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(c.purchases)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{c.cost_per_purchase > 0 ? fmtCurrency(c.cost_per_purchase) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Ads table */}
+            {analytics.ads && analytics.ads.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-2" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                  Individual Ads
+                </p>
+                <div className="rounded-xl border border-mushroom/40 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-oatmilk/40 border-b border-mushroom/30">
+                        {['Ad', 'Spend', 'ROAS', 'Reach', 'Freq', 'Clicks', 'CTR', 'Cart', 'Checkout', 'Purchases', 'Cost/Sale'].map(h => (
+                          <th key={h} className="px-3 py-2 text-left font-semibold text-ink/50 uppercase tracking-wider text-[10px] whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.ads.map((a, i) => (
+                        <tr key={a.ad_id} className={cn('border-b border-mushroom/20 last:border-0', i % 2 === 0 ? 'bg-white' : 'bg-oatmilk/20')}>
+                          <td className="px-3 py-2.5 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                            <div className="flex items-center gap-2.5">
+                              {a.thumbnail_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={a.thumbnail_url}
+                                  alt={a.ad_name}
+                                  className="shrink-0 rounded-md border border-mushroom/40 object-cover"
+                                  style={{ width: 44, height: 44 }}
+                                />
+                              ) : (
+                                <div className="shrink-0 w-11 h-11 rounded-md border border-mushroom/30 bg-oatmilk/60 flex items-center justify-center">
+                                  <span className="text-[10px] text-ink/30" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Ad</span>
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-ink-dark font-medium truncate max-w-[140px]" title={a.ad_name}>{a.ad_name}</p>
+                                {a.campaign_name && <p className="text-[10px] text-ink/40 truncate max-w-[140px]" title={a.campaign_name}>{a.campaign_name}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-ink-dark whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtCurrency(a.spend)}</td>
+                          <td className="px-3 py-2.5 text-ink-dark font-medium whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{a.roas > 0 ? `${a.roas.toFixed(2)}×` : '—'}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(a.reach)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{a.frequency > 0 ? a.frequency.toFixed(2) : '—'}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(a.clicks)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtPct(a.ctr)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(a.add_to_carts)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(a.checkouts)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{fmtNum(a.purchases)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{a.cost_per_purchase > 0 ? fmtCurrency(a.cost_per_purchase) : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1294,6 +1756,16 @@ interface KlaviyoCampaign {
   subject: string | null
   from_email: string | null
   send_time: string | null
+  // Per-campaign engagement metrics (populated after sync)
+  recipients: number | null
+  opens: number | null
+  unique_opens: number | null
+  clicks: number | null
+  unique_clicks: number | null
+  revenue: number | null
+  unsubscribes: number | null
+  open_rate: number | null
+  click_rate: number | null
 }
 
 interface KlaviyoFlow {
@@ -2122,21 +2594,46 @@ function KlaviyoCard() {
                       </span>
                     </div>
                   ))}
-                  {sentCampaigns.slice(0, 5).map(c => (
-                    <div key={c.klaviyo_id} onClick={() => setDetailPane({ type: 'campaign', campaign: c })} className="flex items-start justify-between gap-3 text-xs bg-oatmilk/60 rounded-lg px-3 py-2 cursor-pointer hover:bg-oatmilk/80">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-ink-dark truncate" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                  {sentCampaigns.slice(0, 8).map(c => (
+                    <div key={c.klaviyo_id} onClick={() => setDetailPane({ type: 'campaign', campaign: c })} className="text-xs bg-oatmilk/60 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-oatmilk/80">
+                      <div className="flex items-start justify-between gap-3 mb-1.5">
+                        <p className="font-semibold text-ink-dark truncate flex-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
                           {c.subject ?? c.name}
                         </p>
-                        {c.send_time && (
-                          <p className="text-ink/60 mt-0.5" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
-                            {format(parseISO(c.send_time), 'MMM d, yyyy')}
-                          </p>
-                        )}
+                        <span className="text-[10px] text-ink/40 shrink-0" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                          {c.send_time ? format(parseISO(c.send_time), 'MMM d') : ''}
+                        </span>
                       </div>
-                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0', CAMPAIGN_STATUS_STYLES[c.status] ?? 'bg-oatmilk text-ink border border-mushroom/40')} style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
-                        {c.status}
-                      </span>
+                      {/* Metrics row — shown if we have data */}
+                      {(c.recipients ?? 0) > 0 && (
+                        <div className="flex gap-3 flex-wrap">
+                          {c.recipients != null && (
+                            <span className="text-[10px] text-ink/50" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                              {fmtNum(c.recipients)} sent
+                            </span>
+                          )}
+                          {c.open_rate != null && c.open_rate > 0 && (
+                            <span className="text-[10px] font-semibold text-sage-700" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                              {Math.round(c.open_rate * 100)}% open
+                            </span>
+                          )}
+                          {c.click_rate != null && c.click_rate > 0 && (
+                            <span className="text-[10px] font-semibold text-ink/70" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                              {Math.round(c.click_rate * 100)}% click
+                            </span>
+                          )}
+                          {c.revenue != null && c.revenue > 0 && (
+                            <span className="text-[10px] font-semibold text-thyme" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                              {fmtCurrency(c.revenue)} rev
+                            </span>
+                          )}
+                          {c.unsubscribes != null && c.unsubscribes > 0 && (
+                            <span className="text-[10px] text-terracotta/70" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                              {c.unsubscribes} unsub
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2809,6 +3306,26 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
   const [igSyncing, setIgSyncing] = useState(false)
   const [metaSyncing, setMetaSyncing] = useState(false)
   const [klaviyoSyncing, setKlaviyoSyncing] = useState(false)
+  const [gaConnected, setGaConnected] = useState<boolean | null>(null)
+  const [gaMetrics, setGaMetrics] = useState<ChannelMetric[] | null>(null)
+  const [gaSyncing, setGaSyncing] = useState(false)
+  const [expandedAnalytics, setExpandedAnalytics] = useState(false)
+
+
+  function loadGaData() {
+    setGaSyncing(true)
+    setGaMetrics(null)
+    fetch('/api/google-analytics/data?days=30').then(r => r.json()).then((d: GAData & { error?: string }) => {
+      if (!d.error && d.summary) {
+        setGaMetrics([
+          { label: 'Sessions',    value: fmtNum(d.summary.sessions) },
+          { label: 'New Users',   value: fmtNum(d.summary.newUsers) },
+          { label: 'Bounce Rate', value: d.summary.bounceRate.toFixed(1) + '%' },
+          { label: 'Top Channel', value: d.sources && d.sources[0] ? d.sources[0].channel : '\u2014' },
+        ])
+      }
+    }).catch(() => {}).finally(() => setGaSyncing(false))
+  }
 
   // Drill-down state hoisted to OverviewTab so nested MessagingSection doesn't lose it on re-renders
   type KFlow     = NonNullable<KlaviyoOverviewData['flows']>[0]
@@ -2928,6 +3445,11 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
       setMetaConnected(s.connected)
       if (s.connected) loadMetaData()
     }).catch(() => setMetaConnected(false))
+
+    fetch('/api/google-analytics/status').then(r => r.json()).then((s: { connected: boolean }) => {
+      setGaConnected(s.connected)
+      if (s.connected) loadGaData()
+    }).catch(() => setGaConnected(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync All — fires when parent increments syncTrigger
@@ -2937,6 +3459,7 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
     if (igConnected) syncs.push(new Promise<void>(res => { loadIgData(); setTimeout(res, 3000) }))
     if (messagingConnected) syncs.push(new Promise<void>(res => { loadKlaviyoData(); setTimeout(res, 5000) }))
     if (metaConnected) syncs.push(new Promise<void>(res => { loadMetaData(); setTimeout(res, 3000) }))
+    if (gaConnected) syncs.push(new Promise<void>(res => { loadGaData(); setTimeout(res, 3000) }))
     if (syncs.length === 0) { onSyncDone?.(); return }
     Promise.all(syncs).then(() => onSyncDone?.())
   }, [syncTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -2971,10 +3494,14 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
           </div>
         </div>
         {connected && metrics && (
-          <div style={{ display: 'flex', gap: 0, padding: '14px 18px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
             {metrics.map((m, i) => (
-              <div key={m.label} style={{ flex: 1, borderRight: i < metrics.length - 1 ? BORDER : 'none', paddingRight: i < metrics.length - 1 ? 16 : 0, marginRight: i < metrics.length - 1 ? 16 : 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: INK_LIGHT, marginBottom: 4 }}>{m.label}</div>
+              <div key={m.label} style={{
+                padding: '12px 16px',
+                borderRight: i % 2 === 0 ? BORDER : 'none',
+                borderBottom: i < metrics.length - 2 ? BORDER : 'none',
+              }}>
+                <div style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase' as const, color: INK_LIGHT, marginBottom: 4 }}>{m.label}</div>
                 <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600, color: INK }}>{m.value}</div>
                 {m.sub && <div style={{ fontFamily: FONT, fontSize: 11, color: INK_LIGHT }}>{m.sub}</div>}
               </div>
@@ -3344,17 +3871,49 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
   }
 
   return (
-    <div className="space-y-8">
-      {/* Channel performance */}
+    <div className="space-y-6">
+      {/* Channel performance grid */}
       <div>
         <h2 className="text-xs font-semibold uppercase tracking-widest text-ink mb-4" style={{ fontFamily: FONT, letterSpacing: '0.12em' }}>
           Channel Performance
         </h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="grid grid-cols-2 gap-4">
           <ChannelCard name="Instagram" color="#E1306C" connected={igConnected} metrics={igMetrics} onSync={loadIgData} syncing={igSyncing} />
-          <MessagingSection />
-          <ChannelCard name="Meta Ads"  color="#1877F2" connected={metaConnected} metrics={metaMetrics} onSync={loadMetaData} syncing={metaSyncing} />
+          <ChannelCard name="Meta Ads" color="#1877F2" connected={metaConnected} metrics={metaMetrics} onSync={loadMetaData} syncing={metaSyncing} />
+          <ChannelCard
+            name="Messaging"
+            color="#C27A54"
+            connected={messagingConnected}
+            metrics={klaviyoData ? [
+              { label: 'Subscribers',    value: fmtNum(klaviyoData.total_subscribers) },
+              { label: 'Open Rate (30d)', value: (klaviyoData.metrics?.['Received Email'] ?? 0) > 0 ? ((klaviyoData.metrics!['Opened Email'] ?? 0) / (klaviyoData.metrics!['Received Email'] ?? 1) * 100).toFixed(1) + '%' : '\u2014' },
+              { label: 'Click Rate (30d)', value: (klaviyoData.metrics?.['Received Email'] ?? 0) > 0 ? ((klaviyoData.metrics!['Clicked Email'] ?? 0) / (klaviyoData.metrics!['Received Email'] ?? 1) * 100).toFixed(1) + '%' : '\u2014' },
+              { label: 'Active Flows',   value: String((klaviyoData.flows ?? []).filter((f: { status: string }) => f.status === 'live').length) },
+            ] : null}
+            onSync={loadKlaviyoData}
+            syncing={klaviyoSyncing}
+          />
+          <ChannelCard name="Google Analytics" color="#E37400" connected={gaConnected} metrics={gaMetrics} onSync={loadGaData} syncing={gaSyncing} />
         </div>
+      </div>
+
+      {/* Full analytics — expandable */}
+      <div>
+        <button
+          onClick={() => setExpandedAnalytics(v => !v)}
+          className="w-full flex items-center justify-between px-5 py-3.5 bg-white rounded-xl border border-mushroom/50 hover:bg-oatmilk/40 transition-colors cursor-pointer"
+          style={{ fontFamily: FONT }}
+        >
+          <span className="text-sm font-semibold text-ink-dark">Full Analytics</span>
+          <span className="text-xs font-semibold text-ink/40">{expandedAnalytics ? '\u25b2 Collapse' : '\u25bc Expand'}</span>
+        </button>
+        {expandedAnalytics && (
+          <div className="mt-4 space-y-4">
+            <MessagingSection />
+            <MetaAdsCard />
+            <GoogleAnalyticsCard />
+          </div>
+        )}
       </div>
 
       {/* Upcoming content */}
