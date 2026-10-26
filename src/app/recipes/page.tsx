@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { FlaskConical, Wand2, RotateCcw, Save, ChevronDown, ChevronRight, ChevronLeft, CheckSquare, Square, Loader2, ChefHat, Clock, Leaf, Utensils, Sparkles, ArrowRight, X, Tag, UtensilsCrossed, Plus, Trash2 } from 'lucide-react'
 
@@ -79,7 +79,7 @@ function parseRecipeJson(raw: string): RecipeData | null {
 interface RecipeSlot { role: string; dish: string; blend: string }
 const COURSE_ROLES = ['Breakfast', 'Appetizer', 'Soup / Salad', 'Main', 'Side', 'Snack / Bite', 'Dessert', 'Drink', 'Other']
 
-export default function RecipeLabPage() {
+function RecipeLabPage() {
   const searchParams = useSearchParams()
   const [blends, setBlends] = useState<string[]>([])
   const [blend, setBlend] = useState(STATIC_BLEND_HEADER)
@@ -1786,5 +1786,13 @@ function NutritionLabel({ raw }: { raw: string }) {
         <p className="text-[8px] text-ink/40 leading-snug">Estimated values. Not a substitute for professional nutritional analysis.</p>
       </div>
     </div>
+  )
+}
+
+export default function RecipeLabPageWrapper() {
+  return (
+    <Suspense>
+      <RecipeLabPage />
+    </Suspense>
   )
 }
