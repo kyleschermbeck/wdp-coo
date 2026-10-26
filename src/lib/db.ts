@@ -10,8 +10,11 @@ export function getDb(): Promise<Client> {
         `file:${process.cwd()}/data/wdp.db`
       const authToken = process.env.TURSO_AUTH_TOKEN
       const client = createClient({ url, authToken })
-      await initSchema(client)
-      await runMigrations(client)
+      // Skip schema init/migrations when using Turso — schema is already in place
+      if (!process.env.TURSO_DATABASE_URL) {
+        await initSchema(client)
+        await runMigrations(client)
+      }
       return client
     })()
   }
