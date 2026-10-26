@@ -3,8 +3,8 @@ import { getDb } from '@/lib/db'
 
 export async function GET() {
   try {
-    const db = getDb()
-    const tags = db.prepare('SELECT * FROM tags ORDER BY name ASC').all()
+    const db = await getDb()
+    const tags = (await db.execute({sql: 'SELECT * FROM tags ORDER BY name ASC', args: []})).rows
     return NextResponse.json(tags)
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
@@ -13,15 +13,13 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { name, color } = await req.json()
     if (!name?.trim()) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
-    const result = db.prepare(
-      'INSERT INTO tags (name, color) VALUES (?, ?)'
-    ).run(name.trim(), color || 'sage')
+    const result = await db.execute({sql: 'INSERT INTO tags (name, color) VALUES (?, ?)', args: [name.trim(), color || 'sage']})
 
-    const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(result.lastInsertRowid)
+    const tag = (await db.execute({sql: 'SELECT * FROM tags WHERE id = ?', args: [Number(result.lastInsertRowid)]})).rows[0]
     return NextResponse.json(tag, { status: 201 })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

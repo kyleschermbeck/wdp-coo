@@ -38,10 +38,8 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'theme and courses required' }), { status: 400 })
   }
 
-  const db = getDb()
-  const blends = (db.prepare(
-    `SELECT title, raw FROM shopify_products WHERE status = 'active' AND (is_bundle = 0 OR is_bundle IS NULL) ORDER BY title`
-  ).all() as { title: string; raw: string }[]).map(r => {
+  const db = await getDb()
+  const blends = ((await db.execute({sql: `SELECT title, raw FROM shopify_products WHERE status = 'active' AND (is_bundle = 0 OR is_bundle IS NULL) ORDER BY title`, args: []})).rows as unknown as { title: string; raw: string }[]).map(r => {
     try { return { name: r.title, tags: (JSON.parse(r.raw) as { tags?: string }).tags ?? '' } }
     catch { return { name: r.title, tags: '' } }
   })

@@ -24,27 +24,27 @@ export function getAuthUrl() {
   })
 }
 
-export function saveTokens(tokens: { access_token?: string | null; refresh_token?: string | null; expiry_date?: number | null }) {
-  const db = getDb()
-  db.prepare(`
+export async function saveTokens(tokens: { access_token?: string | null; refresh_token?: string | null; expiry_date?: number | null }) {
+  const db = await getDb()
+  await db.execute({sql: `
     INSERT INTO oauth_tokens (id, provider, access_token, refresh_token, expiry_date)
     VALUES (1, 'google', ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       access_token = excluded.access_token,
       refresh_token = COALESCE(excluded.refresh_token, refresh_token),
       expiry_date = excluded.expiry_date
-  `).run(tokens.access_token ?? null, tokens.refresh_token ?? null, tokens.expiry_date ?? null)
+  `, args: [tokens.access_token ?? null, tokens.refresh_token ?? null, tokens.expiry_date ?? null]})
 }
 
-export function loadTokens() {
-  const db = getDb()
-  return db.prepare('SELECT * FROM oauth_tokens WHERE provider = ?').get('google') as {
+export async function loadTokens() {
+  const db = await getDb()
+  return (await db.execute({sql: 'SELECT * FROM oauth_tokens WHERE provider = ?', args: ['google']})).rows[0] as unknown as {
     access_token: string; refresh_token: string; expiry_date: number
   } | undefined
 }
 
 export async function getGmailClient() {
-  const tokens = loadTokens()
+  const tokens = await loadTokens()
   if (!tokens?.refresh_token) return null
   const client = createOAuth2Client()
   client.setCredentials(tokens)

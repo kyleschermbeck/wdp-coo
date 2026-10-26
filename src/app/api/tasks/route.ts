@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import type { Client } from '@libsql/client'
 
-function attachTags(db: ReturnType<typeof import('@/lib/db').getDb>, tasks: Record<string, unknown>[]) {
+async function attachTags(db: Client, tasks: Record<string, unknown>[]) {
   if (tasks.length === 0) return tasks
   const ids = tasks.map(t => t.id as number)
   const placeholders = ids.map(() => '?').join(',')
-  const rows = db.prepare(`
+  const rows = (await db.execute({sql: `
     SELECT tt.task_id, t.id, t.name, t.color
     FROM tags t JOIN task_tags tt ON tt.tag_id = t.id
     WHERE tt.task_id IN (${placeholders})
-  `).all(...ids) as { task_id: number; id: number; name: string; color: string }[]
+  `, args: ids as (string | number | boolean | null | bigint)[]})).rows as unknown as { task_id: number; id: number; name: string; color: string }[]
 
   const byTask: Record<number, unknown[]> = {}
   for (const r of rows) {
@@ -21,28 +22,28 @@ function attachTags(db: ReturnType<typeof import('@/lib/db').getDb>, tasks: Reco
 
 export async function GET(req: NextRequest) {
   try {
-    const db = getDb()
-    try { db.exec('ALTER TABLE tasks ADD COLUMN start_date TEXT') } catch {}
+    const db = await getDb()
+    try { await db.execute({sql: 'ALTER TABLE tasks ADD COLUMN start_date TEXT', args: []}) } catch {}
     const projectId = req.nextUrl.searchParams.get('project_id')
 
     let tasks = (projectId
-      ? db.prepare(`
+      ? (await db.execute({sql: `
           SELECT t.*, p.name as project_name, p.color as project_color,
             (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id) as subtask_count,
             (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id AND s.status = 'done') as completed_subtask_count
           FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
           WHERE t.project_id = ? ORDER BY t.created_at DESC
-        `).all(projectId)
-      : db.prepare(`
+        `, args: [projectId]})).rows
+      : (await db.execute({sql: `
           SELECT t.*, p.name as project_name, p.color as project_color,
             (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id) as subtask_count,
             (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id AND s.status = 'done') as completed_subtask_count
           FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
           ORDER BY t.due_date ASC NULLS LAST, t.created_at DESC
-        `).all()
+        `, args: []})).rows
     ) as Record<string, unknown>[]
 
-    tasks = attachTags(db, tasks)
+    tasks = await attachTags(db, tasks)
     return NextResponse.json(tasks)
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
@@ -51,22 +52,22 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { project_id, title, description, notes, status, priority, due_date, recipe_data, task_group } = await req.json()
     if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
-    const result = db.prepare(`
+    const result = await db.execute({sql: `
       INSERT INTO tasks (project_id, title, description, notes, status, priority, due_date, recipe_data, task_group)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(project_id || null, title.trim(), description?.trim() || null, notes?.trim() || null, status || 'todo', priority || 'medium', due_date || null, recipe_data || null, task_group || null)
+    `, args: [project_id || null, title.trim(), description?.trim() || null, notes?.trim() || null, status || 'todo', priority || 'medium', due_date || null, recipe_data || null, task_group || null]})
 
-    const taskId = result.lastInsertRowid
+    const taskId = Number(result.lastInsertRowid)
 
-    const task = db.prepare(`
+    const task = (await db.execute({sql: `
       SELECT t.*, p.name as project_name, p.color as project_color
       FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
       WHERE t.id = ?
-    `).get(taskId) as Record<string, unknown>
+    `, args: [taskId]})).rows[0] as unknown as Record<string, unknown>
 
     return NextResponse.json({ ...task, tags: [], subtask_count: 0, completed_subtask_count: 0 }, { status: 201 })
   } catch (err) {

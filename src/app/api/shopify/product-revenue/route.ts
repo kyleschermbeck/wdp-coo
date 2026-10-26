@@ -23,16 +23,16 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const days = parseInt(searchParams.get('days') ?? '90', 10)
 
-  const db = getDb()
+  const db = await getDb()
 
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - days)
 
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT line_items, created_at FROM shopify_orders
     WHERE created_at >= ? AND financial_status != 'refunded'
     ORDER BY created_at DESC
-  `).all(cutoff.toISOString()) as { line_items: string; created_at: string }[]
+  `, args: [cutoff.toISOString()]})).rows as unknown as { line_items: string; created_at: string }[]
 
   // Aggregate by product title
   const productMap = new Map<string, ProductRevenuRow>()

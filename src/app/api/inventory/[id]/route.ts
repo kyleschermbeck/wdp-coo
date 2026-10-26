@@ -5,7 +5,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const db = getDb()
+  const db = await getDb()
   const { id } = await params
   const inventoryId = parseInt(id, 10)
 
@@ -34,8 +34,8 @@ export async function PATCH(
   updates.push("last_updated = datetime('now')")
   values.push(inventoryId)
 
-  db.prepare(`UPDATE inventory SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+  await db.execute({sql: `UPDATE inventory SET ${updates.join(', ')} WHERE id = ?`, args: values as (string | number | boolean | null | bigint)[]})
 
-  const row = db.prepare('SELECT * FROM inventory WHERE id = ?').get(inventoryId)
+  const row = (await db.execute({sql: 'SELECT * FROM inventory WHERE id = ?', args: [inventoryId]})).rows[0]
   return NextResponse.json(row)
 }

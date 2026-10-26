@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import type { Client } from '@libsql/client'
 
 interface LineItem {
   product_id?: string | number
@@ -16,13 +17,13 @@ interface BundleComponent {
 // Build a cost map: shopify_id → cost per unit.
 // Uses product_local.cost_per_unit (set by the inventory page) as the source of truth.
 // For bundles, sums component costs. Returns null for products with no cost data.
-function buildCostMap(db: ReturnType<typeof getDb>): Map<string, number> {
-  const products = db.prepare(`
+async function buildCostMap(db: Client): Promise<Map<string, number>> {
+  const products = (await db.execute({sql: `
     SELECT sp.shopify_id, sp.title, sp.is_bundle, pl.cost_per_unit
     FROM shopify_products sp
     LEFT JOIN product_local pl ON pl.shopify_product_id = sp.shopify_id
     WHERE sp.status != 'archived'
-  `).all() as Array<{ shopify_id: string; title: string; is_bundle: number | null; cost_per_unit: number | null }>
+  `, args: []})).rows as unknown as Array<{ shopify_id: string; title: string; is_bundle: number | null; cost_per_unit: number | null }>
 
   const map = new Map<string, number>()
 
@@ -45,11 +46,11 @@ function buildCostMap(db: ReturnType<typeof getDb>): Map<string, number> {
     }
 
     // Otherwise derive from components
-    const components = db.prepare(`
+    const components = (await db.execute({sql: `
       SELECT component_shopify_id, quantity
       FROM product_bundle_components
       WHERE bundle_shopify_id = ?
-    `).all(p.shopify_id) as BundleComponent[]
+    `, args: [p.shopify_id]})).rows as unknown as BundleComponent[]
 
     if (components.length === 0) continue
 
@@ -70,13 +71,13 @@ function buildCostMap(db: ReturnType<typeof getDb>): Map<string, number> {
 
 // Build a jar-count map: bundle_id → total jars it contains (components × quantity).
 // Non-bundle products are always 1 jar.
-function buildJarsMap(db: ReturnType<typeof getDb>): Map<string, number> {
+async function buildJarsMap(db: Client): Promise<Map<string, number>> {
   const map = new Map<string, number>()
-  const components = db.prepare(`
+  const components = (await db.execute({sql: `
     SELECT bundle_shopify_id, SUM(quantity) as total_jars
     FROM product_bundle_components
     GROUP BY bundle_shopify_id
-  `).all() as Array<{ bundle_shopify_id: string; total_jars: number }>
+  `, args: []})).rows as unknown as Array<{ bundle_shopify_id: string; total_jars: number }>
   for (const row of components) {
     map.set(row.bundle_shopify_id, row.total_jars)
   }
@@ -84,26 +85,26 @@ function buildJarsMap(db: ReturnType<typeof getDb>): Map<string, number> {
 }
 
 export async function GET(req: NextRequest) {
-  const db = getDb()
+  const db = await getDb()
   const days = parseInt(req.nextUrl.searchParams.get('days') ?? '30', 10)
 
-  const costMap = buildCostMap(db)
-  const jarsMap = buildJarsMap(db)
+  const costMap = await buildCostMap(db)
+  const jarsMap = await buildJarsMap(db)
   const costedProductCount = costMap.size
 
   // Query orders in the date range
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - days)
 
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT line_items
     FROM shopify_orders
     WHERE created_at >= ?
       AND financial_status NOT IN ('voided', 'refunded')
-  `).all(cutoff.toISOString()) as Array<{ line_items: string }>
+  `, args: [cutoff.toISOString()]})).rows as unknown as Array<{ line_items: string }>
 
   // Title lookup
-  const titles = db.prepare(`SELECT shopify_id, title FROM shopify_products`).all() as Array<{ shopify_id: string; title: string }>
+  const titles = (await db.execute({sql: `SELECT shopify_id, title FROM shopify_products`, args: []})).rows as unknown as Array<{ shopify_id: string; title: string }>
   const titleMap = new Map(titles.map(p => [p.shopify_id, p.title]))
 
   const breakdownMap = new Map<string, {

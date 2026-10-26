@@ -14,25 +14,19 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: `Cannot move ${qty} — only ${from_can_fill ?? 0} available from order #${from_order_number}` }, { status: 400 })
   }
 
-  const db = getDb()
+  const db = await getDb()
 
   const newFromQty = Math.max(0, (from_can_fill ?? 0) - qty)
   const newToQty = (to_can_fill ?? 0) + qty
 
-  db.transaction(() => {
-    // Pin from-order explicitly with reduced qty
-    db.prepare(`DELETE FROM pack_assignments WHERE shopify_product_id = ? AND order_number = ?`)
-      .run(shopify_product_id, from_order_number)
-    if (newFromQty > 0) {
-      db.prepare(`INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`)
-        .run(shopify_product_id, from_order_number, newFromQty)
-    }
-    // Pin to-order explicitly with increased qty
-    db.prepare(`DELETE FROM pack_assignments WHERE shopify_product_id = ? AND order_number = ?`)
-      .run(shopify_product_id, to_order_number)
-    db.prepare(`INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`)
-      .run(shopify_product_id, to_order_number, newToQty)
-  })()
+  // Pin from-order explicitly with reduced qty
+  await db.execute({sql: `DELETE FROM pack_assignments WHERE shopify_product_id = ? AND order_number = ?`, args: [shopify_product_id, from_order_number]})
+  if (newFromQty > 0) {
+    await db.execute({sql: `INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`, args: [shopify_product_id, from_order_number, newFromQty]})
+  }
+  // Pin to-order explicitly with increased qty
+  await db.execute({sql: `DELETE FROM pack_assignments WHERE shopify_product_id = ? AND order_number = ?`, args: [shopify_product_id, to_order_number]})
+  await db.execute({sql: `INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`, args: [shopify_product_id, to_order_number, newToQty]})
 
   return NextResponse.json({ ok: true })
 }

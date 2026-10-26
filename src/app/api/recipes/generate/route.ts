@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getDb } from '@/lib/db'
+import type { Client } from '@libsql/client'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -15,12 +16,12 @@ function getApiKey(): string | undefined {
 
 interface BlendInfo { name: string; tags: string }
 
-function getActiveBlends(db: ReturnType<typeof import('@/lib/db').getDb>): BlendInfo[] {
-  const rows = db.prepare(`
+async function getActiveBlends(db: Client): Promise<BlendInfo[]> {
+  const rows = (await db.execute({sql: `
     SELECT title, raw FROM shopify_products
     WHERE status = 'active' AND (is_bundle = 0 OR is_bundle IS NULL)
     ORDER BY title
-  `).all() as { title: string; raw: string }[]
+  `, args: []})).rows as unknown as { title: string; raw: string }[]
 
   return rows.map(r => {
     try {
@@ -32,10 +33,10 @@ function getActiveBlends(db: ReturnType<typeof import('@/lib/db').getDb>): Blend
   })
 }
 
-function getExistingRecipes(db: ReturnType<typeof import('@/lib/db').getDb>): string[] {
-  const rows = db.prepare(`
+async function getExistingRecipes(db: Client): Promise<string[]> {
+  const rows = (await db.execute({sql: `
     SELECT title FROM tasks WHERE project_id = 3 ORDER BY created_at DESC
-  `).all() as { title: string }[]
+  `, args: []})).rows as unknown as { title: string }[]
   return rows.map(r => r.title)
 }
 
@@ -103,9 +104,9 @@ export async function POST(req: NextRequest) {
     ? `Here is the current recipe:\n\n${refineContext}\n\nPlease refine it based on this feedback: ${notes || 'Make it better — tighten the steps, punch up the title, or improve the flavor story.'}\n\nReturn the full updated recipe as JSON.`
     : `Generate a new recipe with these criteria:\n\n${criteriaBlock}\n\nReturn the complete recipe as a single JSON object.`
 
-  const db = getDb()
-  const activeBlends = getActiveBlends(db)
-  const existingRecipes = getExistingRecipes(db)
+  const db = await getDb()
+  const activeBlends = await getActiveBlends(db)
+  const existingRecipes = await getExistingRecipes(db)
 
   const client = new Anthropic({ apiKey })
 

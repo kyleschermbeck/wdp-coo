@@ -3,9 +3,9 @@ import { getDb } from '@/lib/db'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const db = getDb()
+  const db = await getDb()
 
-  const order = db.prepare(`
+  const order = (await db.execute({sql: `
     SELECT o.*,
            c.first_name, c.last_name, c.phone,
            c.orders_count as customer_orders_count,
@@ -13,7 +13,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     FROM shopify_orders o
     LEFT JOIN shopify_customers c ON c.email = o.email
     WHERE o.shopify_id = ?
-  `).get(id) as Record<string, unknown> | undefined
+  `, args: [id]})).rows[0] as unknown as Record<string, unknown> | undefined
 
   if (!order) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(order)

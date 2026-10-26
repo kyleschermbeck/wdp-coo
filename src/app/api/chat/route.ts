@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getDb } from '@/lib/db'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import type Database from 'better-sqlite3'
+import type { Client } from '@libsql/client'
 
 function getApiKey(): string | undefined {
   if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY
@@ -414,7 +414,7 @@ const TOOLS: Anthropic.Tool[] = [
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
-  db: Database.Database,
+  db: Client,
   agentId: number,
 ): Promise<unknown> {
   switch (name) {
@@ -422,14 +422,10 @@ async function executeTool(
       const { status = 'all', priority = 'all', project_name, search, task_id, limit = 30 } = input as Record<string, string | number>
       // Direct lookup by ID — fastest path
       if (task_id) {
-        const task = db.prepare(
-          `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.description, t.notes, p.name as project_name
-           FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE t.id = ?`
-        ).get(Number(task_id)) as Record<string, unknown> | undefined
+        const task = (await db.execute({sql: `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.description, t.notes, p.name as project_name
+           FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE t.id = ?`, args: [Number(task_id)]})).rows[0] as unknown as Record<string, unknown> | undefined
         if (!task) return { error: `Task #${task_id} not found` }
-        const subs = db.prepare(
-          `SELECT id, task_id, title, status, completed, due_date, notes FROM subtasks WHERE task_id = ? ORDER BY sort_order, created_at`
-        ).all(Number(task_id)) as Array<Record<string, unknown>>
+        const subs = (await db.execute({sql: `SELECT id, task_id, title, status, completed, due_date, notes FROM subtasks WHERE task_id = ? ORDER BY sort_order, created_at`, args: [Number(task_id)]})).rows as unknown as Array<Record<string, unknown>>
         return [{ ...task, subtasks: subs }]
       }
       let q = `SELECT t.id, t.title, t.status, t.priority, t.start_date, t.due_date, t.description, t.notes, p.name as project_name
@@ -441,13 +437,11 @@ async function executeTool(
       if (search) { q += ' AND t.title LIKE ?'; params.push(`%${search}%`) }
       q += ` ORDER BY CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, t.due_date LIMIT ?`
       params.push(Number(limit))
-      const tasks = db.prepare(q).all(...params) as Array<Record<string, unknown>>
+      const tasks = (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows as unknown as Array<Record<string, unknown>>
       if (tasks.length === 0) return []
       const ids = tasks.map(t => t.id as number)
-      const subtasks = db.prepare(
-        `SELECT id, task_id, title, status, completed, due_date, notes FROM subtasks
-         WHERE task_id IN (${ids.map(() => '?').join(',')}) ORDER BY sort_order, created_at`
-      ).all(...ids) as Array<Record<string, unknown>>
+      const subtasks = (await db.execute({sql: `SELECT id, task_id, title, status, completed, due_date, notes FROM subtasks
+         WHERE task_id IN (${ids.map(() => '?').join(',')}) ORDER BY sort_order, created_at`, args: ids as (string | number | boolean | null | bigint)[]})).rows as unknown as Array<Record<string, unknown>>
       const byTask: Record<number, unknown[]> = {}
       for (const s of subtasks) {
         const tid = s.task_id as number
@@ -465,21 +459,21 @@ async function executeTool(
       const params: unknown[] = []
       if (status && status !== 'all') { q += ' AND p.status = ?'; params.push(status) }
       q += ' GROUP BY p.id ORDER BY p.created_at DESC'
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
     case 'get_orders': {
       const { limit = 10, summary_only = false } = input as Record<string, number | boolean>
-      const summary = db.prepare(`
+      const summary = (await db.execute({sql: `
         SELECT COUNT(*) as total_orders,
                ROUND(SUM(total_price), 2) as total_revenue,
                ROUND(AVG(total_price), 2) as avg_order_value
         FROM shopify_orders WHERE financial_status = 'paid'
-      `).get()
+      `, args: []})).rows[0]
       if (summary_only) return summary
-      const orders = db.prepare(`
+      const orders = (await db.execute({sql: `
         SELECT order_number, email, total_price, financial_status, fulfillment_status, created_at
         FROM shopify_orders ORDER BY created_at DESC LIMIT ?
-      `).all(Number(limit))
+      `, args: [Number(limit)]})).rows
       return { summary, recent_orders: orders }
     }
     case 'get_inventory': {
@@ -497,7 +491,7 @@ async function executeTool(
       if (status && status !== 'all') { q += ' AND sp.status = ?'; params.push(status) }
       if (low_stock_only) q += ' AND sp.is_bundle = 0 AND sp.inventory_quantity <= COALESCE(sis.reorder_threshold, 12)'
       q += ' ORDER BY sp.inventory_quantity ASC, sp.title ASC'
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
     case 'get_contacts': {
       const { type = 'all', limit = 20 } = input as Record<string, string | number>
@@ -506,16 +500,16 @@ async function executeTool(
       if (type && type !== 'all') { q += ' AND type = ?'; params.push(type) }
       q += ' ORDER BY created_at DESC LIMIT ?'
       params.push(Number(limit))
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
     case 'get_marketing': {
       const { include_goals = true, include_events = true, platform, status, limit = 20 } = input as Record<string, unknown>
       const result: Record<string, unknown> = {}
       if (include_goals) {
-        result.goals = db.prepare(`
+        result.goals = (await db.execute({sql: `
           SELECT title, category, target_value, current_value, unit, due_date, status
           FROM marketing_goals ORDER BY category, title
-        `).all()
+        `, args: []})).rows
       }
       if (include_events) {
         let q = `SELECT title, date, platform, type, status, notes, pillar FROM marketing_events WHERE 1=1`
@@ -524,7 +518,7 @@ async function executeTool(
         if (status) { q += ' AND status = ?'; params.push(status) }
         q += ' ORDER BY date DESC LIMIT ?'
         params.push(Number(limit))
-        result.events = db.prepare(q).all(...params)
+        result.events = (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
       }
       return result
     }
@@ -532,16 +526,16 @@ async function executeTool(
       const { include_campaigns = true, include_flows = true, include_lists = true } = input as Record<string, unknown>
       const result: Record<string, unknown> = {}
       if (include_lists) {
-        result.lists = db.prepare(`SELECT name, profile_count FROM klaviyo_lists ORDER BY profile_count DESC`).all()
+        result.lists = (await db.execute({sql: `SELECT name, profile_count FROM klaviyo_lists ORDER BY profile_count DESC`, args: []})).rows
       }
       if (include_campaigns) {
-        result.campaigns = db.prepare(`
+        result.campaigns = (await db.execute({sql: `
           SELECT name, status, send_time, unique_opens, unique_clicks, revenue
           FROM klaviyo_campaigns ORDER BY send_time DESC LIMIT 10
-        `).all()
+        `, args: []})).rows
       }
       if (include_flows) {
-        result.flows = db.prepare(`SELECT name, status FROM klaviyo_flows ORDER BY name`).all()
+        result.flows = (await db.execute({sql: `SELECT name, status FROM klaviyo_flows ORDER BY name`, args: []})).rows
       }
       return result
     }
@@ -558,51 +552,41 @@ async function executeTool(
       if (notes !== undefined) { fields.push('notes = ?'); params.push(notes) }
       if (fields.length === 0) return { error: 'No fields to update' }
       params.push(task_id)
-      db.prepare(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`).run(...params)
-      const task = db.prepare('SELECT id, title, status, priority, start_date, due_date, notes FROM tasks WHERE id = ?').get(task_id)
+      await db.execute({sql: `UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`, args: params as (string | number | boolean | null | bigint)[]})
+      const task = (await db.execute({sql: 'SELECT id, title, status, priority, start_date, due_date, notes FROM tasks WHERE id = ?', args: [task_id]})).rows[0]
       return { updated: true, task }
     }
     case 'create_task': {
       const { title, project_id, start_date, due_date, priority = 'medium', status = 'todo', description, notes } = input as {
         title: string; project_id?: number; start_date?: string; due_date?: string; priority?: string; status?: string; description?: string; notes?: string
       }
-      const result = db.prepare(
-        'INSERT INTO tasks (title, project_id, start_date, due_date, priority, status, description, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(title, project_id ?? null, start_date ?? null, due_date ?? null, priority, status, description ?? null, notes ?? null)
-      const task = db.prepare('SELECT id, title, status, priority, start_date, due_date, project_id FROM tasks WHERE id = ?').get(result.lastInsertRowid)
+      const result = await db.execute({sql: 'INSERT INTO tasks (title, project_id, start_date, due_date, priority, status, description, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', args: [title, project_id ?? null, start_date ?? null, due_date ?? null, priority, status, description ?? null, notes ?? null]})
+      const task = (await db.execute({sql: 'SELECT id, title, status, priority, start_date, due_date, project_id FROM tasks WHERE id = ?', args: [Number(result.lastInsertRowid)]})).rows[0]
       return { created: true, task }
     }
     case 'create_subtask': {
       const { task_id, title, due_date, notes } = input as { task_id: number; title: string; due_date?: string; notes?: string }
-      const parentExists = db.prepare('SELECT id FROM tasks WHERE id = ?').get(task_id)
+      const parentExists = (await db.execute({sql: 'SELECT id FROM tasks WHERE id = ?', args: [task_id]})).rows[0]
       if (!parentExists) return { error: `Task ${task_id} not found` }
-      const result = db.prepare(
-        'INSERT INTO subtasks (task_id, title, due_date, notes, status) VALUES (?, ?, ?, ?, ?)'
-      ).run(task_id, title, due_date ?? null, notes ?? null, 'todo')
-      const subtask = db.prepare('SELECT id, task_id, title, status, due_date FROM subtasks WHERE id = ?').get(result.lastInsertRowid)
+      const result = await db.execute({sql: 'INSERT INTO subtasks (task_id, title, due_date, notes, status) VALUES (?, ?, ?, ?, ?)', args: [task_id, title, due_date ?? null, notes ?? null, 'todo']})
+      const subtask = (await db.execute({sql: 'SELECT id, task_id, title, status, due_date FROM subtasks WHERE id = ?', args: [Number(result.lastInsertRowid)]})).rows[0]
       return { created: true, subtask }
     }
     case 'get_klaviyo_data': {
       const { type = 'all' } = input as { type?: string }
       const result: Record<string, unknown> = {}
       if (type === 'all' || type === 'campaigns') {
-        result.campaigns = db.prepare(
-          `SELECT name, status, subject, send_time, recipients, opens, clicks, open_rate, click_rate, revenue
-           FROM klaviyo_campaigns ORDER BY send_time DESC LIMIT 20`
-        ).all()
+        result.campaigns = (await db.execute({sql: `SELECT name, status, subject, send_time, recipients, opens, clicks, open_rate, click_rate, revenue
+           FROM klaviyo_campaigns ORDER BY send_time DESC LIMIT 20`, args: []})).rows
       }
       if (type === 'all' || type === 'flows') {
-        result.flows = db.prepare(
-          `SELECT name, status, trigger_type, created_at FROM klaviyo_flows ORDER BY created_at DESC LIMIT 10`
-        ).all()
+        result.flows = (await db.execute({sql: `SELECT name, status, trigger_type, created_at FROM klaviyo_flows ORDER BY created_at DESC LIMIT 10`, args: []})).rows
       }
       if (type === 'all' || type === 'metrics') {
-        result.metrics = db.prepare('SELECT name, value FROM klaviyo_metrics').all()
+        result.metrics = (await db.execute({sql: 'SELECT name, value FROM klaviyo_metrics', args: []})).rows
       }
       if (type === 'all' || type === 'lists') {
-        result.lists = db.prepare(
-          `SELECT name, profile_count FROM klaviyo_lists ORDER BY profile_count DESC LIMIT 10`
-        ).all()
+        result.lists = (await db.execute({sql: `SELECT name, profile_count FROM klaviyo_lists ORDER BY profile_count DESC LIMIT 10`, args: []})).rows
       }
       return result
     }
@@ -611,7 +595,7 @@ async function executeTool(
       const result: Record<string, unknown> = {}
 
       if (view === 'all' || view === 'summary') {
-        const summary = db.prepare(`
+        const summary = (await db.execute({sql: `
           SELECT
             COUNT(*) as total_customers,
             COUNT(CASE WHEN orders_count > 1 THEN 1 END) as repeat_buyers,
@@ -622,31 +606,31 @@ async function executeTool(
             ROUND(SUM(total_spent), 2) as total_revenue_from_customers,
             ROUND(AVG(orders_count), 1) as avg_orders_per_customer
           FROM shopify_customers
-        `).get()
+        `, args: []})).rows[0]
         result.summary = summary
       }
 
       if (view === 'all' || view === 'top_customers') {
-        result.top_customers = db.prepare(`
+        result.top_customers = (await db.execute({sql: `
           SELECT first_name, last_name, email, orders_count, total_spent, tags
           FROM shopify_customers
           WHERE total_spent > 0
           ORDER BY total_spent DESC
           LIMIT 10
-        `).all()
+        `, args: []})).rows
       }
 
       if (view === 'all' || view === 'klaviyo') {
-        result.klaviyo_lists = db.prepare(`
+        result.klaviyo_lists = (await db.execute({sql: `
           SELECT name, profile_count FROM klaviyo_lists ORDER BY profile_count DESC
-        `).all()
-        const profileCount = db.prepare('SELECT COUNT(*) as count FROM klaviyo_profiles').get()
+        `, args: []})).rows
+        const profileCount = (await db.execute({sql: 'SELECT COUNT(*) as count FROM klaviyo_profiles', args: []})).rows[0]
         result.klaviyo_total_profiles = profileCount
       }
 
       // Top products by order frequency
       if (view === 'all') {
-        const recentOrders = db.prepare(`SELECT line_items FROM shopify_orders LIMIT 50`).all() as { line_items: string }[]
+        const recentOrders = (await db.execute({sql: `SELECT line_items FROM shopify_orders LIMIT 50`, args: []})).rows as unknown as { line_items: string }[]
         const productCounts: Record<string, number> = {}
         for (const row of recentOrders) {
           try {
@@ -665,11 +649,11 @@ async function executeTool(
       return result
     }
     case 'sync_meta_ads': {
-      const metaConfig = db.prepare('SELECT access_token, ad_account_id, account_name FROM meta_ads_config LIMIT 1').get() as
-        { access_token: string; ad_account_id: string; account_name: string } | undefined
+      const metaConfig = (await db.execute({sql: 'SELECT access_token, ad_account_id, account_name FROM meta_ads_config LIMIT 1', args: []})).rows[0] as
+        unknown as { access_token: string; ad_account_id: string; account_name: string } | undefined
       if (!metaConfig?.access_token) return { error: 'Meta Ads not configured' }
       // Return sync instructions — actual live fetch happens via /api/meta-ads/sync (requires production env with network access)
-      const existing = db.prepare('SELECT COUNT(*) as count FROM meta_ads_campaigns').get() as { count: number }
+      const existing = (await db.execute({sql: 'SELECT COUNT(*) as count FROM meta_ads_campaigns', args: []})).rows[0] as unknown as { count: number }
       return {
         status: 'sync_available',
         account_name: metaConfig.account_name,
@@ -684,8 +668,8 @@ async function executeTool(
       const { source = 'all' } = input as { source?: string }
       const result: Record<string, unknown> = {}
       if (source === 'all' || source === 'meta_ads') {
-        const metaConfig = db.prepare('SELECT account_name, ad_account_id, connected_at FROM meta_ads_config LIMIT 1').get() as { account_name: string; ad_account_id: string; connected_at: string } | undefined
-        const metaCampaigns = db.prepare('SELECT id, name, COALESCE(effective_status, status) as status, objective, spend, impressions, clicks, reach, cpc, cpm, ctr, date_start, date_stop, synced_at FROM meta_ads_campaigns ORDER BY spend DESC').all() as Array<Record<string, unknown>>
+        const metaConfig = (await db.execute({sql: 'SELECT account_name, ad_account_id, connected_at FROM meta_ads_config LIMIT 1', args: []})).rows[0] as unknown as { account_name: string; ad_account_id: string; connected_at: string } | undefined
+        const metaCampaigns = (await db.execute({sql: 'SELECT id, name, COALESCE(effective_status, status) as status, objective, spend, impressions, clicks, reach, cpc, cpm, ctr, date_start, date_stop, synced_at FROM meta_ads_campaigns ORDER BY spend DESC', args: []})).rows as unknown as Array<Record<string, unknown>>
         result.meta_ads = {
           connected: !!metaConfig,
           account_name: metaConfig?.account_name ?? null,
@@ -699,7 +683,7 @@ async function executeTool(
         }
       }
       if (source === 'all' || source === 'google_analytics') {
-        const gaConfig = db.prepare('SELECT property_id, property_name FROM google_analytics_config WHERE id = 1').get() as { property_id: string; property_name: string } | undefined
+        const gaConfig = (await db.execute({sql: 'SELECT property_id, property_name FROM google_analytics_config WHERE id = 1', args: []})).rows[0] as unknown as { property_id: string; property_name: string } | undefined
         if (gaConfig?.property_id) {
           try {
             // 12-second timeout to avoid hanging the stream on slow external GA API
@@ -721,41 +705,33 @@ async function executeTool(
         }
       }
       if (source === 'all' || source === 'instagram') {
-        result.instagram = db.prepare('SELECT * FROM instagram_config LIMIT 1').get()
+        result.instagram = (await db.execute({sql: 'SELECT * FROM instagram_config LIMIT 1', args: []})).rows[0]
         result.ig_note = 'Instagram account connected; live follower/engagement data requires live API access'
       }
       return result
     }
     case 'save_memory': {
       const { topic, content } = input as { topic: string; content: string }
-      const existing = db.prepare(
-        'SELECT id FROM agent_memories WHERE agent_id = ? AND topic = ?'
-      ).get(agentId, topic) as { id: number } | undefined
+      const existing = (await db.execute({sql: 'SELECT id FROM agent_memories WHERE agent_id = ? AND topic = ?', args: [agentId, topic]})).rows[0] as unknown as { id: number } | undefined
       if (existing) {
-        db.prepare(
-          "UPDATE agent_memories SET content = ?, updated_at = datetime('now') WHERE id = ?"
-        ).run(content, existing.id)
+        await db.execute({sql: "UPDATE agent_memories SET content = ?, updated_at = datetime('now') WHERE id = ?", args: [content, existing.id]})
         return { saved: true, action: 'updated', topic, content }
       }
-      const r = db.prepare(
-        'INSERT INTO agent_memories (agent_id, topic, content) VALUES (?, ?, ?)'
-      ).run(agentId, topic, content)
-      return { saved: true, action: 'created', id: r.lastInsertRowid, topic, content }
+      const r = await db.execute({sql: 'INSERT INTO agent_memories (agent_id, topic, content) VALUES (?, ?, ?)', args: [agentId, topic, content]})
+      return { saved: true, action: 'created', id: Number(r.lastInsertRowid), topic, content }
     }
     case 'get_memories': {
-      return db.prepare(
-        'SELECT id, topic, content, updated_at FROM agent_memories WHERE agent_id = ? ORDER BY updated_at DESC'
-      ).all(agentId)
+      return (await db.execute({sql: 'SELECT id, topic, content, updated_at FROM agent_memories WHERE agent_id = ? ORDER BY updated_at DESC', args: [agentId]})).rows
     }
     case 'delete_memory': {
       const { memory_id } = input as { memory_id: number }
-      db.prepare('DELETE FROM agent_memories WHERE id = ? AND agent_id = ?').run(memory_id, agentId)
+      await db.execute({sql: 'DELETE FROM agent_memories WHERE id = ? AND agent_id = ?', args: [memory_id, agentId]})
       return { deleted: true, memory_id }
     }
     case 'search_docs': {
       const { query } = input as { query: string }
       try {
-        const results = db.prepare(`
+        const results = (await db.execute({sql: `
           SELECT d.id, d.original_name, d.task_id,
                  snippet(documents_fts, 0, '**', '**', '…', 48) as excerpt
           FROM documents_fts
@@ -763,7 +739,7 @@ async function executeTool(
           WHERE documents_fts MATCH ?
           ORDER BY rank
           LIMIT 4
-        `).all(query) as { id: number; original_name: string; task_id: number | null; excerpt: string }[]
+        `, args: [query]})).rows as unknown as { id: number; original_name: string; task_id: number | null; excerpt: string }[]
         if (results.length === 0) return { found: false, message: 'No documents matched that query.' }
         return { found: true, results: results.map(r => ({ document: r.original_name, excerpt: r.excerpt })) }
       } catch {
@@ -776,11 +752,11 @@ async function executeTool(
       const { subject, body, to_email, to_name, context } = input as {
         subject: string; body: string; to_email?: string; to_name?: string; context?: string
       }
-      const result = db.prepare(`
+      const result = await db.execute({sql: `
         INSERT INTO agent_email_queue (subject, body, to_email, to_name, context)
         VALUES (?, ?, ?, ?, ?)
-      `).run(subject, body, to_email ?? null, to_name ?? null, context ?? null)
-      return { queued: true, id: result.lastInsertRowid, subject, message: 'Email draft added to review queue. Kyle will see it before anything is sent.' }
+      `, args: [subject, body, to_email ?? null, to_name ?? null, context ?? null]})
+      return { queued: true, id: Number(result.lastInsertRowid), subject, message: 'Email draft added to review queue. Kyle will see it before anything is sent.' }
     }
 
     case 'write_recipe': {
@@ -788,24 +764,22 @@ async function executeTool(
         title: string; tagline?: string; description?: string; blend_used: string
         ingredients: string; instructions: string; notes?: string
       }
-      const result = db.prepare(`
+      const result = await db.execute({sql: `
         INSERT INTO recipes (title, tagline, description, blend_used, ingredients, instructions, notes, status, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 'coo_agent')
-      `).run(title, tagline ?? null, description ?? null, blend_used, ingredients, instructions, notes ?? null)
-      return { written: true, id: result.lastInsertRowid, title, status: 'draft', message: 'Recipe saved as draft.' }
+      `, args: [title, tagline ?? null, description ?? null, blend_used, ingredients, instructions, notes ?? null]})
+      return { written: true, id: Number(result.lastInsertRowid), title, status: 'draft', message: 'Recipe saved as draft.' }
     }
 
     case 'update_inventory_threshold': {
       const { product_name, new_threshold } = input as { product_name: string; new_threshold: number }
-      const product = db.prepare(
-        'SELECT shopify_id, title FROM shopify_products WHERE title LIKE ? AND status = ? LIMIT 1'
-      ).get(`%${product_name}%`, 'active') as { shopify_id: string; title: string } | undefined
+      const product = (await db.execute({sql: 'SELECT shopify_id, title FROM shopify_products WHERE title LIKE ? AND status = ? LIMIT 1', args: [`%${product_name}%`, 'active']})).rows[0] as unknown as { shopify_id: string; title: string } | undefined
       if (!product) return { error: `No active product found matching "${product_name}"` }
-      db.prepare(`
+      await db.execute({sql: `
         INSERT INTO shopify_inventory_settings (shopify_product_id, reorder_threshold)
         VALUES (?, ?)
         ON CONFLICT(shopify_product_id) DO UPDATE SET reorder_threshold = excluded.reorder_threshold
-      `).run(product.shopify_id, new_threshold)
+      `, args: [product.shopify_id, new_threshold]})
       return { updated: true, product: product.title, new_threshold }
     }
 
@@ -813,11 +787,11 @@ async function executeTool(
       const { item_type, item_name, reason, urgency = 'medium' } = input as {
         item_type: string; item_name: string; reason: string; urgency?: string
       }
-      const result = db.prepare(`
+      const result = await db.execute({sql: `
         INSERT INTO agent_flags (item_type, item_name, reason, urgency)
         VALUES (?, ?, ?, ?)
-      `).run(item_type, item_name, reason, urgency)
-      return { flagged: true, id: result.lastInsertRowid, item_name, urgency, message: 'Flag created.' }
+      `, args: [item_type, item_name, reason, urgency]})
+      return { flagged: true, id: Number(result.lastInsertRowid), item_name, urgency, message: 'Flag created.' }
     }
 
     case 'get_supplies': {
@@ -826,7 +800,7 @@ async function executeTool(
       const params: unknown[] = []
       if (category && category !== 'all') { q += ' AND category = ?'; params.push(category) }
       q += ' ORDER BY category, name'
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
 
     case 'get_flags': {
@@ -837,7 +811,7 @@ async function executeTool(
       if (urgency && urgency !== 'all') { q += ' AND urgency = ?'; params.push(urgency) }
       q += ' ORDER BY CASE urgency WHEN ? THEN 1 WHEN ? THEN 2 ELSE 3 END, created_at DESC'
       params.push('high', 'medium')
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
 
     case 'get_email_queue': {
@@ -846,7 +820,7 @@ async function executeTool(
       const params: unknown[] = []
       if (status && status !== 'all') { q += ' AND status = ?'; params.push(status) }
       q += ' ORDER BY created_at DESC LIMIT 10'
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
 
     case 'get_recipes': {
@@ -858,11 +832,11 @@ async function executeTool(
       if (status && status !== 'all') { q += ' AND status = ?'; params.push(status) }
       if (blend) { q += ' AND blend_used LIKE ?'; params.push(`%${blend}%`) }
       q += ' ORDER BY created_at DESC'
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
 
     case 'get_marketing_strategy': {
-      return db.prepare('SELECT section, content, updated_at FROM marketing_strategy ORDER BY section').all()
+      return (await db.execute({sql: 'SELECT section, content, updated_at FROM marketing_strategy ORDER BY section', args: []})).rows
     }
 
     case 'get_products': {
@@ -871,25 +845,21 @@ async function executeTool(
       const params: unknown[] = []
       if (active_only) { q += ' AND active = 1' }
       q += ' ORDER BY id'
-      return db.prepare(q).all(...params)
+      return (await db.execute({sql: q, args: params as (string | number | boolean | null | bigint)[]})).rows
     }
 
     case 'get_customer_insights': {
-      const totalCustomers = db.prepare('SELECT COUNT(*) as count FROM shopify_customers').get() as { count: number }
-      const topSpenders = db.prepare(
-        'SELECT first_name, last_name, email, orders_count, ROUND(total_spent, 2) as total_spent FROM shopify_customers ORDER BY total_spent DESC LIMIT 10'
-      ).all()
-      const orderStats = db.prepare(`
+      const totalCustomers = (await db.execute({sql: 'SELECT COUNT(*) as count FROM shopify_customers', args: []})).rows[0] as unknown as { count: number }
+      const topSpenders = (await db.execute({sql: 'SELECT first_name, last_name, email, orders_count, ROUND(total_spent, 2) as total_spent FROM shopify_customers ORDER BY total_spent DESC LIMIT 10', args: []})).rows
+      const orderStats = (await db.execute({sql: `
         SELECT COUNT(*) as total_orders,
                ROUND(SUM(total_price), 2) as total_revenue,
                ROUND(AVG(total_price), 2) as avg_order_value,
                COUNT(DISTINCT email) as unique_customers
         FROM shopify_orders WHERE financial_status = 'paid'
-      `).get()
-      const repeatBuyers = db.prepare(
-        'SELECT COUNT(*) as count FROM shopify_customers WHERE orders_count > 1'
-      ).get() as { count: number }
-      const listSize = db.prepare('SELECT SUM(profile_count) as total FROM klaviyo_lists').get() as { total: number | null }
+      `, args: []})).rows[0]
+      const repeatBuyers = (await db.execute({sql: 'SELECT COUNT(*) as count FROM shopify_customers WHERE orders_count > 1', args: []})).rows[0] as unknown as { count: number }
+      const listSize = (await db.execute({sql: 'SELECT SUM(profile_count) as total FROM klaviyo_lists', args: []})).rows[0] as unknown as { total: number | null }
       return {
         total_shopify_customers: totalCustomers.count,
         repeat_buyers: repeatBuyers.count,
@@ -901,33 +871,29 @@ async function executeTool(
 
     case 'get_blend_recipe': {
       const { blend_name } = input as { blend_name: string }
-      const product = db.prepare(
-        `SELECT shopify_id, title FROM shopify_products WHERE lower(title) LIKE lower(?)`
-      ).get(`%${blend_name}%`) as { shopify_id: string; title: string } | undefined
+      const product = (await db.execute({sql: `SELECT shopify_id, title FROM shopify_products WHERE lower(title) LIKE lower(?)`, args: [`%${blend_name}%`]})).rows[0] as unknown as { shopify_id: string; title: string } | undefined
 
       if (!product) return { error: `No blend found matching "${blend_name}". Available blends: ${
-        (db.prepare(`SELECT title FROM shopify_products WHERE status = 'active' AND (is_bundle = 0 OR is_bundle IS NULL)`).all() as { title: string }[]).map(r => r.title).join(', ')
+        ((await db.execute({sql: `SELECT title FROM shopify_products WHERE status = 'active' AND (is_bundle = 0 OR is_bundle IS NULL)`, args: []})).rows as unknown as { title: string }[]).map(r => r.title).join(', ')
       }` }
 
-      const ingredients = db.prepare(`
+      const ingredients = (await db.execute({sql: `
         SELECT pi.tbsp, s.name as ingredient, s.oz_per_tbsp,
                ROUND(pi.tbsp * COALESCE(s.oz_per_tbsp, 0), 3) as oz_per_jar
         FROM product_ingredients pi
         JOIN supplies s ON s.id = pi.supply_id
         WHERE pi.shopify_product_id = ?
         ORDER BY pi.sort_order
-      `).all(product.shopify_id)
+      `, args: [product.shopify_id]})).rows
 
-      const packaging = db.prepare(`
+      const packaging = (await db.execute({sql: `
         SELECT s.name, s.serving_size, s.serving_unit
         FROM product_packaging pp
         JOIN supplies s ON s.id = pp.supply_id
         WHERE pp.shopify_product_id = ?
-      `).all(product.shopify_id)
+      `, args: [product.shopify_id]})).rows
 
-      const local = db.prepare(
-        'SELECT labor_cost, cost_per_unit FROM product_local WHERE shopify_product_id = ?'
-      ).get(product.shopify_id) as { labor_cost: number; cost_per_unit: number } | undefined
+      const local = (await db.execute({sql: 'SELECT labor_cost, cost_per_unit FROM product_local WHERE shopify_product_id = ?', args: [product.shopify_id]})).rows[0] as unknown as { labor_cost: number; cost_per_unit: number } | undefined
 
       return {
         blend_name: product.title,
@@ -953,13 +919,11 @@ export async function POST(req: NextRequest) {
     image?: { data: string; media_type: string }
   }
 
-  const db = getDb()
-  const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agent_id) as Agent | undefined
+  const db = await getDb()
+  const agent = (await db.execute({sql: 'SELECT * FROM agents WHERE id = ?', args: [agent_id]})).rows[0] as unknown as Agent | undefined
 
   // Load memories and inject into system prompt
-  const memories = db.prepare(
-    'SELECT id, topic, content FROM agent_memories WHERE agent_id = ? ORDER BY updated_at DESC LIMIT 30'
-  ).all(agent_id) as { id: number; topic: string; content: string }[]
+  const memories = (await db.execute({sql: 'SELECT id, topic, content FROM agent_memories WHERE agent_id = ? ORDER BY updated_at DESC LIMIT 30', args: [agent_id]})).rows as unknown as { id: number; topic: string; content: string }[]
 
   const memorySection = memories.length > 0
     ? `\n\n## What you remember about Kyle and WDP\n${memories.map(m => `- **${m.topic}** (id:${m.id}): ${m.content}`).join('\n')}`
@@ -968,13 +932,13 @@ export async function POST(req: NextRequest) {
   // Pull brand/tone context from all knowledge base documents
   let brandSection = ''
   try {
-    const brandDocs = db.prepare(`
+    const brandDocs = (await db.execute({sql: `
       SELECT original_name, content_text
       FROM documents
       WHERE content_text IS NOT NULL AND length(content_text) > 50
       ORDER BY created_at DESC
       LIMIT 5
-    `).all() as { original_name: string; content_text: string }[]
+    `, args: []})).rows as unknown as { original_name: string; content_text: string }[]
 
     if (brandDocs.length > 0) {
       const docContext = brandDocs.map(d =>
@@ -1092,7 +1056,7 @@ ${upcomingLines.length > 0
           const finalMsg = await stream.finalMessage()
 
           try {
-            db.prepare('INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)').run('chat', model, finalMsg.usage.input_tokens, finalMsg.usage.output_tokens)
+            await db.execute({sql: 'INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)', args: ['chat', model, finalMsg.usage.input_tokens, finalMsg.usage.output_tokens]})
           } catch { /* ignore */ }
 
           if (finalMsg.stop_reason !== 'tool_use' || toolUseBlocks.length === 0) break

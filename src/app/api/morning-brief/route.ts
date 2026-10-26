@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getDb } from '@/lib/db'
+import type { Client } from '@libsql/client'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -35,32 +36,32 @@ export interface BriefData {
   }
 }
 
-async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> {
+async function buildBriefData(db: Client): Promise<BriefData> {
   const sections: BriefSection[] = []
 
   // Revenue (30d) — matches financials tab: exclude only voided/refunded orders
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT COUNT(*) as count, ROUND(SUM(total_price), 2) as revenue
     FROM shopify_orders
     WHERE financial_status NOT IN ('voided', 'refunded')
       AND created_at >= datetime('now', '-30 days')
-  `).get() as { count: number; revenue: number | null } | undefined
+  `, args: []})).rows[0] as unknown as { count: number; revenue: number | null } | undefined
 
   if (orders && (orders.revenue ?? 0) > 0) {
     // Week-over-week comparison
-    const lastWeek = db.prepare(`
+    const lastWeek = (await db.execute({sql: `
       SELECT ROUND(SUM(total_price), 2) as revenue
       FROM shopify_orders
       WHERE financial_status NOT IN ('voided', 'refunded')
         AND created_at >= datetime('now', '-14 days')
         AND created_at < datetime('now', '-7 days')
-    `).get() as { revenue: number | null } | undefined
-    const thisWeek = db.prepare(`
+    `, args: []})).rows[0] as unknown as { revenue: number | null } | undefined
+    const thisWeek = (await db.execute({sql: `
       SELECT ROUND(SUM(total_price), 2) as revenue
       FROM shopify_orders
       WHERE financial_status NOT IN ('voided', 'refunded')
         AND created_at >= datetime('now', '-7 days')
-    `).get() as { revenue: number | null } | undefined
+    `, args: []})).rows[0] as unknown as { revenue: number | null } | undefined
 
     const lw = lastWeek?.revenue ?? 0
     const tw = thisWeek?.revenue ?? 0
@@ -77,7 +78,7 @@ async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> 
   }
 
   // Low stock
-  const lowStockRaw = db.prepare(`
+  const lowStockRaw = (await db.execute({sql: `
     SELECT sp.title as name, sp.inventory_quantity as qty
     FROM shopify_products sp
     LEFT JOIN shopify_inventory_settings sis ON sis.shopify_product_id = sp.shopify_id
@@ -85,7 +86,7 @@ async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> 
       AND sp.inventory_quantity <= COALESCE(sis.reorder_threshold, 12)
     ORDER BY sp.inventory_quantity ASC
     LIMIT 6
-  `).all() as { name: string; qty: number }[]
+  `, args: []})).rows as unknown as { name: string; qty: number }[]
 
   // Separate negative-stock (Shopify oversell) from genuinely low stock
   const negativeStock = lowStockRaw.filter(s => s.qty < 0)
@@ -109,9 +110,9 @@ async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> 
   }
 
   // Tasks — overdue and urgent
-  const overdue = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE status != 'done' AND due_date < date('now')`).get() as { count: number }
-  const urgentTasks = db.prepare(`SELECT title FROM tasks WHERE status != 'done' AND priority = 'urgent' ORDER BY created_at DESC LIMIT 3`).all() as { title: string }[]
-  const openCount = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE status != 'done'`).get() as { count: number }
+  const overdue = (await db.execute({sql: `SELECT COUNT(*) as count FROM tasks WHERE status != 'done' AND due_date < date('now')`, args: []})).rows[0] as unknown as { count: number }
+  const urgentTasks = (await db.execute({sql: `SELECT title FROM tasks WHERE status != 'done' AND priority = 'urgent' ORDER BY created_at DESC LIMIT 3`, args: []})).rows as unknown as { title: string }[]
+  const openCount = (await db.execute({sql: `SELECT COUNT(*) as count FROM tasks WHERE status != 'done'`, args: []})).rows[0] as unknown as { count: number }
 
   if (overdue.count > 0 || urgentTasks.length > 0) {
     sections.push({
@@ -128,9 +129,9 @@ async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> 
   }
 
   // Klaviyo email metrics
-  const openRateRow = db.prepare(`SELECT value_30d FROM klaviyo_metrics WHERE LOWER(metric_name) LIKE '%open%' LIMIT 1`).get() as { value_30d: number } | undefined
-  const clickRateRow = db.prepare(`SELECT value_30d FROM klaviyo_metrics WHERE LOWER(metric_name) LIKE '%click%' LIMIT 1`).get() as { value_30d: number } | undefined
-  const listSize = db.prepare(`SELECT SUM(profile_count) as total FROM klaviyo_lists`).get() as { total: number | null } | undefined
+  const openRateRow = (await db.execute({sql: `SELECT value_30d FROM klaviyo_metrics WHERE LOWER(metric_name) LIKE '%open%' LIMIT 1`, args: []})).rows[0] as unknown as { value_30d: number } | undefined
+  const clickRateRow = (await db.execute({sql: `SELECT value_30d FROM klaviyo_metrics WHERE LOWER(metric_name) LIKE '%click%' LIMIT 1`, args: []})).rows[0] as unknown as { value_30d: number } | undefined
+  const listSize = (await db.execute({sql: `SELECT SUM(profile_count) as total FROM klaviyo_lists`, args: []})).rows[0] as unknown as { total: number | null } | undefined
 
   if (openRateRow || clickRateRow) {
     const openPct = openRateRow?.value_30d ?? null
@@ -148,12 +149,12 @@ async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> 
   }
 
   // Active projects snapshot — count ALL, display top 3 names
-  const allActiveProjects = db.prepare(`
+  const allActiveProjects = (await db.execute({sql: `
     SELECT p.name, COUNT(t.id) as task_count, SUM(CASE WHEN t.status='done' THEN 1 ELSE 0 END) as done_count
     FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
     WHERE p.status NOT IN ('complete','archived','completed')
     GROUP BY p.id ORDER BY p.created_at DESC
-  `).all() as { name: string; task_count: number; done_count: number }[]
+  `, args: []})).rows as unknown as { name: string; task_count: number; done_count: number }[]
 
   if (allActiveProjects.length > 0) {
     const total = allActiveProjects.reduce((s, p) => s + p.task_count, 0)
@@ -170,9 +171,9 @@ async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> 
   }
 
   // Meta Ads snapshot
-  const metaConfig = db.prepare('SELECT account_name FROM meta_ads_config LIMIT 1').get() as { account_name: string } | undefined
+  const metaConfig = (await db.execute({sql: 'SELECT account_name FROM meta_ads_config LIMIT 1', args: []})).rows[0] as unknown as { account_name: string } | undefined
   if (metaConfig) {
-    const campaigns = db.prepare("SELECT name, COALESCE(effective_status, status) as status, spend, impressions, clicks, ctr, synced_at FROM meta_ads_campaigns ORDER BY spend DESC").all() as Array<{
+    const campaigns = (await db.execute({sql: "SELECT name, COALESCE(effective_status, status) as status, spend, impressions, clicks, ctr, synced_at FROM meta_ads_campaigns ORDER BY spend DESC", args: []})).rows as unknown as Array<{
       name: string; status: string; spend: number; impressions: number; clicks: number; ctr: number | null; synced_at: string
     }>
     const totalSpend   = campaigns.reduce((s, c) => s + (c.spend ?? 0), 0)
@@ -246,9 +247,9 @@ async function buildBriefData(db: ReturnType<typeof getDb>): Promise<BriefData> 
 }
 
 export async function GET() {
-  const db = getDb()
-  const row = db.prepare(`SELECT value, updated_at FROM settings_kv WHERE key = 'morning_brief'`).get() as
-    | { value: string; updated_at: string }
+  const db = await getDb()
+  const row = (await db.execute({sql: `SELECT value, updated_at FROM settings_kv WHERE key = 'morning_brief'`, args: []})).rows[0] as
+    unknown as | { value: string; updated_at: string }
     | undefined
 
   const today = new Date().toISOString().slice(0, 10)
@@ -258,7 +259,7 @@ export async function GET() {
   const briefData = await buildBriefData(db)
 
   // Also check for a stored question from last generation
-  const storedData = db.prepare(`SELECT value FROM settings_kv WHERE key = 'morning_brief_data'`).get() as { value: string } | undefined
+  const storedData = (await db.execute({sql: `SELECT value FROM settings_kv WHERE key = 'morning_brief_data'`, args: []})).rows[0] as unknown as { value: string } | undefined
   if (storedData) {
     try {
       const parsed = JSON.parse(storedData.value) as { question?: string }
@@ -276,19 +277,19 @@ export async function GET() {
 }
 
 export async function POST() {
-  const db = getDb()
+  const db = await getDb()
   const apiKey = getApiKey()
   if (!apiKey) return NextResponse.json({ error: 'No API key configured' }, { status: 400 })
 
-  const tasks = db.prepare(`
+  const tasks = (await db.execute({sql: `
     SELECT t.title, t.status, t.priority, t.due_date, p.name as project_name
     FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
     WHERE t.status != 'done'
     ORDER BY CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
     LIMIT 20
-  `).all()
+  `, args: []})).rows
 
-  const lowStock = db.prepare(`
+  const lowStock = (await db.execute({sql: `
     SELECT sp.title as name, sp.inventory_quantity as quantity_on_hand,
            COALESCE(sis.reorder_threshold, 12) as reorder_threshold
     FROM shopify_products sp
@@ -296,16 +297,16 @@ export async function POST() {
     WHERE sp.status = 'active' AND sp.is_bundle = 0
       AND sp.inventory_quantity <= COALESCE(sis.reorder_threshold, 12)
     ORDER BY sp.inventory_quantity ASC
-  `).all()
+  `, args: []})).rows
 
-  const orderSummary = db.prepare(`
+  const orderSummary = (await db.execute({sql: `
     SELECT COUNT(*) as orders, ROUND(SUM(total_price), 2) as revenue
     FROM shopify_orders
     WHERE financial_status NOT IN ('voided', 'refunded')
       AND created_at >= datetime('now', '-30 days')
-  `).get()
+  `, args: []})).rows[0]
 
-  const projects = db.prepare(`
+  const projects = (await db.execute({sql: `
     SELECT p.name, p.status, COUNT(t.id) as task_count,
            SUM(CASE WHEN t.status='done' THEN 1 ELSE 0 END) as done_count
     FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
@@ -313,11 +314,11 @@ export async function POST() {
     GROUP BY p.id
     ORDER BY p.created_at DESC
     LIMIT 8
-  `).all()
+  `, args: []})).rows
 
-  const igConnected = db.prepare('SELECT username FROM instagram_config WHERE id = 1').get() as { username: string | null } | undefined
-  const klaviyoLists = db.prepare('SELECT name, profile_count FROM klaviyo_lists ORDER BY profile_count DESC LIMIT 3').all()
-  const klaviyoMetrics = db.prepare('SELECT metric_name, value_30d FROM klaviyo_metrics ORDER BY updated_at DESC').all()
+  const igConnected = (await db.execute({sql: 'SELECT username FROM instagram_config WHERE id = 1', args: []})).rows[0] as unknown as { username: string | null } | undefined
+  const klaviyoLists = (await db.execute({sql: 'SELECT name, profile_count FROM klaviyo_lists ORDER BY profile_count DESC LIMIT 3', args: []})).rows
+  const klaviyoMetrics = (await db.execute({sql: 'SELECT metric_name, value_30d FROM klaviyo_metrics ORDER BY updated_at DESC', args: []})).rows
 
   const dateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -376,23 +377,22 @@ For the question: Make it actionable and specific. Examples: "Want me to pause t
   }
 
   // Save narrative brief
-  db.prepare(`
+  await db.execute({sql: `
     INSERT INTO settings_kv (key, value, updated_at) VALUES ('morning_brief', ?, datetime('now'))
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(brief)
+  `, args: [brief]})
 
   // Build and save structured data with the AI-generated question
   const briefData = await buildBriefData(db)
   if (question) briefData.question = question
 
-  db.prepare(`
+  await db.execute({sql: `
     INSERT INTO settings_kv (key, value, updated_at) VALUES ('morning_brief_data', ?, datetime('now'))
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(JSON.stringify(briefData))
+  `, args: [JSON.stringify(briefData)]})
 
   try {
-    db.prepare('INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)')
-      .run('morning_brief', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens)
+    await db.execute({sql: 'INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)', args: ['morning_brief', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens]})
   } catch { /* ignore */ }
 
   return NextResponse.json({

@@ -3,18 +3,18 @@ import { getDb } from '@/lib/db'
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
-    const subtask = db.prepare(`
+    const subtask = (await db.execute({sql: `
       SELECT s.*,
         (SELECT COUNT(*) FROM subtask_items WHERE subtask_id = s.id) as subitem_count,
         (SELECT COUNT(*) FROM subtask_items WHERE subtask_id = s.id AND completed = 1) as completed_subitem_count
       FROM subtasks s WHERE s.id = ?
-    `).get(id)
+    `, args: [id]})).rows[0]
     if (!subtask) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const tags = db.prepare(`
+    const tags = (await db.execute({sql: `
       SELECT t.* FROM tags t JOIN subtask_tags st ON st.tag_id = t.id WHERE st.subtask_id = ?
-    `).all(id)
+    `, args: [id]})).rows
     return NextResponse.json({ ...(subtask as object), tags })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
@@ -23,39 +23,35 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
     const body = await req.json()
     const { title, notes, start_date, due_date, completed, status, task_id } = body
     const resolvedStatus = status ?? (completed ? 'done' : 'todo')
     const resolvedCompleted = resolvedStatus === 'done' ? 1 : 0
     if (task_id !== undefined) {
-      db.prepare(
-        'UPDATE subtasks SET title = ?, notes = ?, start_date = ?, due_date = ?, completed = ?, status = ?, task_id = ? WHERE id = ?'
-      ).run(title?.trim(), notes ?? null, start_date || null, due_date || null, resolvedCompleted, resolvedStatus, task_id, id)
+      await db.execute({sql: 'UPDATE subtasks SET title = ?, notes = ?, start_date = ?, due_date = ?, completed = ?, status = ?, task_id = ? WHERE id = ?', args: [title?.trim(), notes ?? null, start_date || null, due_date || null, resolvedCompleted, resolvedStatus, task_id, id]})
     } else {
-      db.prepare(
-        'UPDATE subtasks SET title = ?, notes = ?, start_date = ?, due_date = ?, completed = ?, status = ? WHERE id = ?'
-      ).run(title?.trim(), notes ?? null, start_date || null, due_date || null, resolvedCompleted, resolvedStatus, id)
+      await db.execute({sql: 'UPDATE subtasks SET title = ?, notes = ?, start_date = ?, due_date = ?, completed = ?, status = ? WHERE id = ?', args: [title?.trim(), notes ?? null, start_date || null, due_date || null, resolvedCompleted, resolvedStatus, id]})
     }
-    const subtask = db.prepare(`
+    const subtask = (await db.execute({sql: `
       SELECT s.*,
         (SELECT COUNT(*) FROM subtask_items WHERE subtask_id = s.id) as subitem_count,
         (SELECT COUNT(*) FROM subtask_items WHERE subtask_id = s.id AND completed = 1) as completed_subitem_count
       FROM subtasks s WHERE s.id = ?
-    `).get(id) as { task_id: number } & Record<string, unknown>
-    const tags = db.prepare(`
+    `, args: [id]})).rows[0] as unknown as { task_id: number } & Record<string, unknown>
+    const tags = (await db.execute({sql: `
       SELECT t.* FROM tags t JOIN subtask_tags st ON st.tag_id = t.id WHERE st.subtask_id = ?
-    `).all(id)
+    `, args: [id]})).rows
 
     // Auto-complete parent task if all its subtasks are now done
     if (subtask?.task_id) {
-      const counts = db.prepare(`
+      const counts = (await db.execute({sql: `
         SELECT COUNT(*) as total, SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as done
         FROM subtasks WHERE task_id = ?
-      `).get(subtask.task_id) as { total: number; done: number }
+      `, args: [subtask.task_id]})).rows[0] as unknown as { total: number; done: number }
       if (counts.total > 0 && counts.total === counts.done) {
-        db.prepare(`UPDATE tasks SET status = 'done' WHERE id = ? AND status != 'done'`).run(subtask.task_id)
+        await db.execute({sql: `UPDATE tasks SET status = 'done' WHERE id = ? AND status != 'done'`, args: [subtask.task_id]})
       }
     }
 
@@ -67,7 +63,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
     const patch = await req.json() as Record<string, unknown>
 
@@ -87,23 +83,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const setClauses = [...new Set(fields)].map(f => `${f} = ?`).join(', ')
     const uniqueFields = [...new Set(fields)]
     const values = uniqueFields.map(f => patch[f] ?? null)
-    db.prepare(`UPDATE subtasks SET ${setClauses} WHERE id = ?`).run(...values, id)
+    await db.execute({sql: `UPDATE subtasks SET ${setClauses} WHERE id = ?`, args: [...values, id] as (string | number | boolean | null | bigint)[]})
 
-    const subtask = db.prepare(`
+    const subtask = (await db.execute({sql: `
       SELECT s.*,
         (SELECT COUNT(*) FROM subtask_items WHERE subtask_id = s.id) as subitem_count,
         (SELECT COUNT(*) FROM subtask_items WHERE subtask_id = s.id AND completed = 1) as completed_subitem_count
       FROM subtasks s WHERE s.id = ?
-    `).get(id) as { task_id: number } & Record<string, unknown>
+    `, args: [id]})).rows[0] as unknown as { task_id: number } & Record<string, unknown>
 
     // Auto-complete parent task if all subtasks are now done
     if (subtask?.task_id) {
-      const counts = db.prepare(`
+      const counts = (await db.execute({sql: `
         SELECT COUNT(*) as total, SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as done
         FROM subtasks WHERE task_id = ?
-      `).get(subtask.task_id) as { total: number; done: number }
+      `, args: [subtask.task_id]})).rows[0] as unknown as { total: number; done: number }
       if (counts.total > 0 && counts.total === counts.done) {
-        db.prepare(`UPDATE tasks SET status = 'done' WHERE id = ? AND status != 'done'`).run(subtask.task_id)
+        await db.execute({sql: `UPDATE tasks SET status = 'done' WHERE id = ? AND status != 'done'`, args: [subtask.task_id]})
       }
     }
 
@@ -115,9 +111,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
-    db.prepare('DELETE FROM subtasks WHERE id = ?').run(id)
+    await db.execute({sql: 'DELETE FROM subtasks WHERE id = ?', args: [id]})
     return NextResponse.json({ ok: true })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

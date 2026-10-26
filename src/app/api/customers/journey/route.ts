@@ -37,16 +37,16 @@ export async function GET(req: NextRequest) {
   const email = req.nextUrl.searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
-  const db = getDb()
+  const db = await getDb()
 
   // ── Shopify orders for this email ──
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT shopify_id, order_number, total_price, subtotal_price,
            financial_status, fulfillment_status, line_items, created_at, discount_codes
     FROM shopify_orders
     WHERE lower(email) = lower(?)
     ORDER BY created_at ASC
-  `).all(email) as OrderRow[]
+  `, args: [email]})).rows as unknown as OrderRow[]
 
   const parsedOrders = orders.map(o => {
     let items: LineItem[] = []
@@ -64,21 +64,21 @@ export async function GET(req: NextRequest) {
   })
 
   // ── Klaviyo profile + list memberships ──
-  const klaviyoProfiles = db.prepare(`
+  const klaviyoProfiles = (await db.execute({sql: `
     SELECT klaviyo_id, email, first_name, last_name, created
     FROM klaviyo_profiles
     WHERE lower(email) = lower(?)
     ORDER BY created ASC
-  `).all(email) as ProfileRow[]
+  `, args: [email]})).rows as unknown as ProfileRow[]
 
   // Use the earliest Klaviyo profile if multiple exist
   const klaviyoProfile = klaviyoProfiles[0] ?? null
 
   const lists: ProfileListRow[] = klaviyoProfile
-    ? db.prepare(`
+    ? (await db.execute({sql: `
         SELECT list_id, list_name FROM klaviyo_profile_lists
         WHERE profile_id = ?
-      `).all(klaviyoProfile.klaviyo_id) as ProfileListRow[]
+      `, args: [klaviyoProfile.klaviyo_id]})).rows as unknown as ProfileListRow[]
     : []
 
   // ── Derived metrics ──

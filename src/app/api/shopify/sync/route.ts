@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db'
 import { syncShopifyData } from '@/lib/shopify'
 
 export async function POST() {
-  const db = getDb()
+  const db = await getDb()
   try {
     const result = await syncShopifyData(db)
     return NextResponse.json(result)

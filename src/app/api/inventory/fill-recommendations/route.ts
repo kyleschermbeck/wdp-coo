@@ -33,20 +33,18 @@ export interface FillRecommendationsResponse {
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const jarRow = db.prepare(
-    `SELECT containers_on_hand FROM supplies WHERE name = '8 oz. Jar' LIMIT 1`
-  ).get() as JarRow | undefined
+  const jarRow = (await db.execute({sql: `SELECT containers_on_hand FROM supplies WHERE name = '8 oz. Jar' LIMIT 1`, args: []})).rows[0] as unknown as JarRow | undefined
   const jarsOnHand = Math.floor(jarRow?.containers_on_hand ?? 0)
 
-  const dateRangeRow = db.prepare(`
+  const dateRangeRow = (await db.execute({sql: `
     SELECT (julianday(MAX(created_at)) - julianday(MIN(created_at))) / 7.0 AS weeks
     FROM shopify_orders WHERE fulfillment_status = 'fulfilled'
-  `).get() as DateRangeRow | undefined
+  `, args: []})).rows[0] as unknown as DateRangeRow | undefined
   const weeks = dateRangeRow?.weeks ?? 1
 
-  const blends = db.prepare(`
+  const blends = (await db.execute({sql: `
     SELECT
       sp.shopify_id,
       sp.title,
@@ -61,7 +59,7 @@ export async function GET() {
       AND sp.title NOT IN ('Build A Bundle!')
     GROUP BY sp.shopify_id
     ORDER BY sp.title ASC
-  `).all() as BlendRow[]
+  `, args: []})).rows as unknown as BlendRow[]
 
   const recommendations: FillRecommendation[] = []
   let totalVelocity = 0

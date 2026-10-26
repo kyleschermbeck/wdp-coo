@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/marketing?shopify_error=missing_params', request.url))
   }
 
-  const db = getDb()
-  const config = db.prepare('SELECT store_url, client_id, client_secret, oauth_state FROM shopify_config WHERE id = 1').get() as
-    | { store_url: string; client_id: string; client_secret: string; oauth_state: string }
+  const db = await getDb()
+  const config = (await db.execute({sql: 'SELECT store_url, client_id, client_secret, oauth_state FROM shopify_config WHERE id = 1', args: []})).rows[0] as
+    unknown as | { store_url: string; client_id: string; client_secret: string; oauth_state: string }
     | undefined
 
   if (!config) {
@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
 
     const { access_token } = await tokenRes.json() as { access_token: string }
 
-    db.prepare(`
+    await db.execute({sql: `
       UPDATE shopify_config SET access_token = ?, oauth_state = NULL WHERE id = 1
-    `).run(access_token)
+    `, args: [access_token]})
 
     return NextResponse.redirect(new URL('/marketing?shopify_connected=1', request.url))
   } catch (err) {

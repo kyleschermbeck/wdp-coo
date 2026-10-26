@@ -31,34 +31,28 @@ interface LineItem {
 
 // GET: all active, non-bundle products with their label inventory + units needed
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
   // Find label supply
-  const labelSupply = db.prepare(
-    `SELECT id FROM supplies WHERE name = 'Jar Label - 100/roll' AND active = 1 LIMIT 1`
-  ).get() as { id: number } | undefined
+  const labelSupply = (await db.execute({sql: `SELECT id FROM supplies WHERE name = 'Jar Label - 100/roll' AND active = 1 LIMIT 1`, args: []})).rows[0] as unknown as { id: number } | undefined
 
-  const products = db.prepare(
-    `SELECT sp.shopify_id, sp.title, sp.is_bundle, sp.inventory_quantity,
+  const products = (await db.execute({sql: `SELECT sp.shopify_id, sp.title, sp.is_bundle, sp.inventory_quantity,
             CASE WHEN lie.shopify_product_id IS NOT NULL THEN 1 ELSE 0 END as excluded
      FROM shopify_products sp
      LEFT JOIN label_inventory_excluded lie ON lie.shopify_product_id = sp.shopify_id
      WHERE sp.status = 'active' AND sp.is_bundle = 0
-     ORDER BY sp.title`
-  ).all() as ProductRow[]
+     ORDER BY sp.title`, args: []})).rows as unknown as ProductRow[]
 
   // Existing label inventory rows
-  const inventoryRows = labelSupply ? (db.prepare(
-    `SELECT shopify_product_id, units_on_hand FROM product_label_inventory WHERE supply_id = ?`
-  ).all(labelSupply.id) as LabelInventoryRow[]) : []
+  const inventoryRows = labelSupply ? ((await db.execute({sql: `SELECT shopify_product_id, units_on_hand FROM product_label_inventory WHERE supply_id = ?`, args: [labelSupply.id]})).rows as unknown as LabelInventoryRow[]) : []
   const inventoryMap: Record<string, number> = {}
   for (const r of inventoryRows) inventoryMap[r.shopify_product_id] = r.units_on_hand
 
   // Jars still to pack per product
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT line_items FROM shopify_orders
     WHERE fulfillment_status IS NULL OR fulfillment_status IN ('unfulfilled', 'partial')
-  `).all() as OrderRow[]
+  `, args: []})).rows as unknown as OrderRow[]
 
   const jarsNeeded: Record<string, number> = {}
   for (const order of orders) {
@@ -74,7 +68,7 @@ export async function GET() {
   const stockMap: Record<string, number> = {}
   for (const p of products) stockMap[p.shopify_id] = p.inventory_quantity
 
-  const labeledJarsRows = db.prepare(`SELECT shopify_product_id, qty FROM labeled_jars`).all() as LabeledJarsRow[]
+  const labeledJarsRows = (await db.execute({sql: `SELECT shopify_product_id, qty FROM labeled_jars`, args: []})).rows as unknown as LabeledJarsRow[]
   const labeledJarsMap: Record<string, number> = {}
   for (const r of labeledJarsRows) labeledJarsMap[r.shopify_product_id] = r.qty
 
@@ -99,29 +93,29 @@ export async function GET() {
 
 // PUT: toggle excluded status for a product
 export async function PUT(req: NextRequest) {
-  const db = getDb()
+  const db = await getDb()
   const { shopify_product_id, excluded }: { shopify_product_id: string; excluded: boolean } = await req.json()
   if (!shopify_product_id) return NextResponse.json({ error: 'shopify_product_id required' }, { status: 400 })
   if (excluded) {
-    db.prepare(`INSERT OR IGNORE INTO label_inventory_excluded (shopify_product_id) VALUES (?)`).run(shopify_product_id)
+    await db.execute({sql: `INSERT OR IGNORE INTO label_inventory_excluded (shopify_product_id) VALUES (?)`, args: [shopify_product_id]})
   } else {
-    db.prepare(`DELETE FROM label_inventory_excluded WHERE shopify_product_id = ?`).run(shopify_product_id)
+    await db.execute({sql: `DELETE FROM label_inventory_excluded WHERE shopify_product_id = ?`, args: [shopify_product_id]})
   }
   return NextResponse.json({ ok: true, excluded })
 }
 
 // PATCH: update a single product's label inventory
 export async function PATCH(req: NextRequest) {
-  const db = getDb()
+  const db = await getDb()
   const { shopify_product_id, supply_id, units_on_hand } = await req.json()
   if (!shopify_product_id || supply_id == null) {
     return NextResponse.json({ error: 'shopify_product_id and supply_id required' }, { status: 400 })
   }
   const val = Math.max(0, parseInt(units_on_hand) || 0)
-  db.prepare(`
+  await db.execute({sql: `
     INSERT INTO product_label_inventory (shopify_product_id, supply_id, units_on_hand)
     VALUES (?, ?, ?)
     ON CONFLICT(shopify_product_id, supply_id) DO UPDATE SET units_on_hand = excluded.units_on_hand
-  `).run(shopify_product_id, supply_id, val)
+  `, args: [shopify_product_id, supply_id, val]})
   return NextResponse.json({ ok: true, units_on_hand: val })
 }

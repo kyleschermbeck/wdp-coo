@@ -37,18 +37,16 @@ interface LabeledJarsRow {
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const supplies = db.prepare(
-    `SELECT id, name, vendor, order_url, package_cost, total_servings, containers_on_hand
-     FROM supplies WHERE category = 'packaging' AND active = 1 AND name NOT LIKE '%Label%' ORDER BY name`
-  ).all() as PackagingSupplyRow[]
+  const supplies = (await db.execute({sql: `SELECT id, name, vendor, order_url, package_cost, total_servings, containers_on_hand
+     FROM supplies WHERE category = 'packaging' AND active = 1 AND name NOT LIKE '%Label%' ORDER BY name`, args: []})).rows as unknown as PackagingSupplyRow[]
 
   // Compute jars still to pack per product (same logic as supply-levels)
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT line_items FROM shopify_orders
     WHERE fulfillment_status IS NULL OR fulfillment_status IN ('unfulfilled', 'partial')
-  `).all() as OrderRow[]
+  `, args: []})).rows as unknown as OrderRow[]
 
   const jarsNeeded: Record<string, number> = {}
   for (const order of orders) {
@@ -62,14 +60,12 @@ export async function GET() {
     }
   }
 
-  const products = db.prepare(
-    `SELECT shopify_id, inventory_quantity FROM shopify_products WHERE status != 'archived'`
-  ).all() as ProductStock[]
+  const products = (await db.execute({sql: `SELECT shopify_id, inventory_quantity FROM shopify_products WHERE status != 'archived'`, args: []})).rows as unknown as ProductStock[]
 
   const stockMap: Record<string, number> = {}
   for (const p of products) stockMap[p.shopify_id] = p.inventory_quantity
 
-  const labeledJarsRows = db.prepare(`SELECT shopify_product_id, qty FROM labeled_jars`).all() as LabeledJarsRow[]
+  const labeledJarsRows = (await db.execute({sql: `SELECT shopify_product_id, qty FROM labeled_jars`, args: []})).rows as unknown as LabeledJarsRow[]
   const labeledJarsMap: Record<string, number> = {}
   for (const r of labeledJarsRows) labeledJarsMap[r.shopify_product_id] = r.qty
 
@@ -82,9 +78,7 @@ export async function GET() {
   }
 
   // Units needed per packaging supply = sum of jars_to_pack for products using it
-  const links = db.prepare(
-    `SELECT supply_id, shopify_product_id FROM product_packaging`
-  ).all() as PackagingLink[]
+  const links = (await db.execute({sql: `SELECT supply_id, shopify_product_id FROM product_packaging`, args: []})).rows as unknown as PackagingLink[]
 
   const unitsNeeded: Record<number, number> = {}
   for (const link of links) {

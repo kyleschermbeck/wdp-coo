@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3'
+import type { Client } from '@libsql/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,8 +107,8 @@ export interface SyncResult {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-export function getShopifyConfig(db: Database.Database): ShopifyConfig | null {
-  const row = db.prepare('SELECT * FROM shopify_config WHERE id = 1').get() as ShopifyConfig | undefined
+export async function getShopifyConfig(db: Client): Promise<ShopifyConfig | null> {
+  const row = (await db.execute({sql: 'SELECT * FROM shopify_config WHERE id = 1', args: []})).rows[0] as unknown as ShopifyConfig | undefined
   return row ?? null
 }
 
@@ -314,8 +314,8 @@ export async function updateCustomer(
 
 // ─── Sync ─────────────────────────────────────────────────────────────────────
 
-export async function syncShopifyData(db: Database.Database): Promise<SyncResult> {
-  const config = getShopifyConfig(db)
+export async function syncShopifyData(db: Client): Promise<SyncResult> {
+  const config = await getShopifyConfig(db)
   if (!config) throw new Error('Shopify not configured')
 
   // ── Orders (90 days) — graceful if read_all_orders scope is missing ──
@@ -325,7 +325,7 @@ export async function syncShopifyData(db: Database.Database): Promise<SyncResult
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
     const orders = await fetchOrders(config, { created_at_min: ninetyDaysAgo.toISOString(), limit: 250 })
 
-    const upsertOrder = db.prepare(`
+    const upsertOrderSql = `
       INSERT INTO shopify_orders
         (shopify_id, order_number, email, total_price, subtotal_price, total_tax,
          total_discounts, total_shipping, discount_codes, financial_status,
@@ -346,23 +346,21 @@ export async function syncShopifyData(db: Database.Database): Promise<SyncResult
         created_at = excluded.created_at,
         processed_at = excluded.processed_at,
         synced_at = datetime('now')
-    `)
+    `
 
-    db.transaction(() => {
-      for (const o of orders) {
-        const totalShipping = (o.shipping_lines ?? []).reduce(
-          (sum, s) => sum + parseFloat(s.price ?? '0'), 0
-        )
-        upsertOrder.run(
-          String(o.id), o.order_number, o.email ?? null,
-          parseFloat(o.total_price), parseFloat(o.subtotal_price),
-          parseFloat(o.total_tax ?? '0'), parseFloat(o.total_discounts ?? '0'),
-          totalShipping, JSON.stringify(o.discount_codes ?? []),
-          o.financial_status, o.fulfillment_status ?? null,
-          JSON.stringify(o.line_items), o.created_at, o.processed_at ?? null,
-        )
-      }
-    })()
+    for (const o of orders) {
+      const totalShipping = (o.shipping_lines ?? []).reduce(
+        (sum, s) => sum + parseFloat(s.price ?? '0'), 0
+      )
+      await db.execute({ sql: upsertOrderSql, args: [
+        String(o.id), o.order_number, o.email ?? null,
+        parseFloat(o.total_price), parseFloat(o.subtotal_price),
+        parseFloat(o.total_tax ?? '0'), parseFloat(o.total_discounts ?? '0'),
+        totalShipping, JSON.stringify(o.discount_codes ?? []),
+        o.financial_status, o.fulfillment_status ?? null,
+        JSON.stringify(o.line_items), o.created_at, o.processed_at ?? null,
+      ]})
+    }
     ordersCount = orders.length
   } catch (err) {
     console.warn('[Shopify sync] Orders skipped (missing read_all_orders scope?):', (err as Error).message)
@@ -370,10 +368,10 @@ export async function syncShopifyData(db: Database.Database): Promise<SyncResult
 
   // ── Products ──
   const shopifyProducts = await fetchProducts(config)
-  const localProducts = db.prepare('SELECT id, slug FROM products').all() as { id: number; slug: string }[]
+  const localProducts = (await db.execute({sql: 'SELECT id, slug FROM products', args: []})).rows as unknown as { id: number; slug: string }[]
   const slugToId = new Map(localProducts.map(p => [p.slug, p.id]))
 
-  const upsertProduct = db.prepare(`
+  const upsertProductSql = `
     INSERT INTO shopify_products
       (shopify_id, title, handle, status, inventory_quantity, inventory_item_id, product_id, raw)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -386,24 +384,22 @@ export async function syncShopifyData(db: Database.Database): Promise<SyncResult
       product_id = excluded.product_id,
       raw = excluded.raw,
       synced_at = datetime('now')
-  `)
+  `
 
-  db.transaction(() => {
-    for (const p of shopifyProducts) {
-      const totalInventory = p.variants.reduce((sum, v) => sum + (v.inventory_quantity ?? 0), 0)
-      const localId = slugToId.get(p.handle) ?? null
-      const inventoryItemId = p.variants[0]?.inventory_item_id ? String(p.variants[0].inventory_item_id) : null
-      upsertProduct.run(
-        String(p.id), p.title, p.handle, p.status,
-        totalInventory, inventoryItemId, localId, JSON.stringify(p),
-      )
-    }
-  })()
+  for (const p of shopifyProducts) {
+    const totalInventory = p.variants.reduce((sum, v) => sum + (v.inventory_quantity ?? 0), 0)
+    const localId = slugToId.get(p.handle) ?? null
+    const inventoryItemId = p.variants[0]?.inventory_item_id ? String(p.variants[0].inventory_item_id) : null
+    await db.execute({ sql: upsertProductSql, args: [
+      String(p.id), p.title, p.handle, p.status,
+      totalInventory, inventoryItemId, localId, JSON.stringify(p),
+    ]})
+  }
 
   // ── Customers ──
   const customers = await fetchCustomers(config)
 
-  const upsertCustomer = db.prepare(`
+  const upsertCustomerSql = `
     INSERT INTO shopify_customers
       (shopify_id, email, first_name, last_name, phone, orders_count, total_spent, tags, note, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -418,33 +414,29 @@ export async function syncShopifyData(db: Database.Database): Promise<SyncResult
       note = excluded.note,
       updated_at = excluded.updated_at,
       synced_at = datetime('now')
-  `)
+  `
 
-  db.transaction(() => {
-    for (const c of customers) {
-      upsertCustomer.run(
-        String(c.id), c.email ?? null, c.first_name ?? null, c.last_name ?? null,
-        c.phone ?? null, c.orders_count, parseFloat(c.total_spent),
-        c.tags, c.note ?? null, c.created_at, c.updated_at,
-      )
-    }
-  })()
+  for (const c of customers) {
+    await db.execute({ sql: upsertCustomerSql, args: [
+      String(c.id), c.email ?? null, c.first_name ?? null, c.last_name ?? null,
+      c.phone ?? null, c.orders_count, parseFloat(c.total_spent),
+      c.tags, c.note ?? null, c.created_at, c.updated_at,
+    ]})
+  }
 
   // ── Locations ──
   const locations = await fetchLocations(config)
-  const upsertLocation = db.prepare(`
+  const upsertLocationSql = `
     INSERT INTO shopify_locations (shopify_id, name, active)
     VALUES (?, ?, ?)
     ON CONFLICT(shopify_id) DO UPDATE SET name = excluded.name, active = excluded.active
-  `)
-  db.transaction(() => {
-    for (const l of locations) {
-      upsertLocation.run(String(l.id), l.name, l.active ? 1 : 0)
-    }
-  })()
+  `
+  for (const l of locations) {
+    await db.execute({ sql: upsertLocationSql, args: [String(l.id), l.name, l.active ? 1 : 0] })
+  }
 
   const now = new Date().toISOString()
-  db.prepare('UPDATE shopify_config SET last_synced_at = ? WHERE id = 1').run(now)
+  await db.execute({sql: 'UPDATE shopify_config SET last_synced_at = ? WHERE id = 1', args: [now]})
 
   return { orders_synced: ordersCount, products_synced: shopifyProducts.length, customers_synced: customers.length, synced_at: now }
 }

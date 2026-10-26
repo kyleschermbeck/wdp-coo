@@ -17,10 +17,10 @@ interface BundleComponent {
 interface DailyRow { date: string; revenue: number; orders: number }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
   // ── Daily revenue (last 30 days) ───────────────────────────────────────────
-  const dailyRows = db.prepare(`
+  const dailyRows = (await db.execute({sql: `
     SELECT DATE(created_at) as date,
            ROUND(SUM(total_price), 2) as revenue,
            COUNT(*) as orders
@@ -29,7 +29,7 @@ export async function GET() {
       AND created_at >= datetime('now', '-30 days')
     GROUP BY DATE(created_at)
     ORDER BY date ASC
-  `).all() as DailyRow[]
+  `, args: []})).rows as unknown as DailyRow[]
 
   // Fill gaps — produce a continuous 30-day array
   const today = new Date()
@@ -43,12 +43,12 @@ export async function GET() {
   }
 
   // ── Bundle components map ──────────────────────────────────────────────────
-  const components = db.prepare(`
+  const components = (await db.execute({sql: `
     SELECT pbc.bundle_shopify_id, pbc.component_shopify_id, pbc.quantity,
            COALESCE(sp.title, pbc.component_shopify_id) as component_title
     FROM product_bundle_components pbc
     LEFT JOIN shopify_products sp ON sp.shopify_id = pbc.component_shopify_id
-  `).all() as BundleComponent[]
+  `, args: []})).rows as unknown as BundleComponent[]
 
   // Map: bundle_shopify_id → [{component_shopify_id, quantity, component_title}]
   const bundleMap = new Map<string, Array<{ id: string; qty: number; title: string }>>()
@@ -62,11 +62,11 @@ export async function GET() {
   }
 
   // ── Jars by product (decomposing bundles) ──────────────────────────────────
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT line_items FROM shopify_orders
     WHERE financial_status NOT IN ('voided', 'refunded')
       AND created_at >= datetime('now', '-30 days')
-  `).all() as Array<{ line_items: string }>
+  `, args: []})).rows as unknown as Array<{ line_items: string }>
 
   // Count jars per individual product (not bundles)
   const jarCounts = new Map<string, { title: string; jars: number }>()

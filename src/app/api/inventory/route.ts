@@ -2,15 +2,15 @@ import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const shopifyConfig = db.prepare('SELECT access_token FROM shopify_config WHERE id = 1').get() as
-    | { access_token: string } | undefined
+  const shopifyConfig = (await db.execute({sql: 'SELECT access_token FROM shopify_config WHERE id = 1', args: []})).rows[0] as
+    unknown as | { access_token: string } | undefined
   const shopifyConnected = !!(shopifyConfig?.access_token)
 
   if (shopifyConnected) {
     // Shopify-first: all synced products joined with local data where available
-    const rows = db.prepare(`
+    const rows = (await db.execute({sql: `
       SELECT
         sp.id,
         sp.shopify_id,
@@ -30,12 +30,12 @@ export async function GET() {
       LEFT JOIN shopify_inventory_settings sis ON sis.shopify_product_id = sp.shopify_id
       WHERE sp.status != 'archived'
       ORDER BY sp.title ASC
-    `).all()
+    `, args: []})).rows
     return NextResponse.json({ source: 'shopify', rows })
   }
 
   // Fallback: local products only
-  const rows = db.prepare(`
+  const rows = (await db.execute({sql: `
     SELECT
       p.id AS product_id, p.name, p.slug, p.accent_color, p.active,
       i.id AS inventory_id, i.quantity_on_hand, i.reorder_threshold, i.last_updated
@@ -43,6 +43,6 @@ export async function GET() {
     LEFT JOIN inventory i ON i.product_id = p.id
     WHERE p.active = 1
     ORDER BY p.name ASC
-  `).all()
+  `, args: []})).rows
   return NextResponse.json({ source: 'local', rows })
 }

@@ -71,8 +71,8 @@ export async function POST(request: Request) {
     }
   }
 
-  const db = getDb()
-  db.prepare(`
+  const db = await getDb()
+  await db.execute({sql: `
     INSERT INTO meta_ads_config (id, access_token, ad_account_id, account_name, app_id, app_secret, token_expiry, connected_at)
     VALUES (1, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       app_secret = excluded.app_secret,
       token_expiry = excluded.token_expiry,
       connected_at = excluded.connected_at
-  `).run(finalToken, accountId, account.name ?? null, resolvedAppId ?? null, resolvedAppSecret ?? null, tokenExpiry)
+  `, args: [finalToken, accountId, account.name ?? null, resolvedAppId ?? null, resolvedAppSecret ?? null, tokenExpiry]})
 
   return NextResponse.json({
     ok: true,

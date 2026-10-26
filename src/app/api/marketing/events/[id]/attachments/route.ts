@@ -11,10 +11,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
-  const attachments = db.prepare(
-    'SELECT * FROM event_attachments WHERE event_id = ? ORDER BY created_at ASC'
-  ).all(id)
+  const db = await getDb()
+  const attachments = (await db.execute({sql: 'SELECT * FROM event_attachments WHERE event_id = ? ORDER BY created_at ASC', args: [id]})).rows
   return NextResponse.json(attachments)
 }
 
@@ -23,7 +21,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
+  const db = await getDb()
 
   const formData = await request.formData()
   const file = formData.get('file') as File | null
@@ -37,11 +35,11 @@ export async function POST(
   await mkdir(UPLOAD_DIR, { recursive: true })
   await writeFile(path.join(UPLOAD_DIR, filename), buffer)
 
-  const result = db.prepare(`
+  const result = await db.execute({sql: `
     INSERT INTO event_attachments (event_id, filename, original_name, mime_type, size)
     VALUES (?, ?, ?, ?, ?)
-  `).run(id, filename, file.name, file.type, file.size)
+  `, args: [id, filename, file.name, file.type, file.size]})
 
-  const attachment = db.prepare('SELECT * FROM event_attachments WHERE id = ?').get(result.lastInsertRowid)
+  const attachment = (await db.execute({sql: 'SELECT * FROM event_attachments WHERE id = ?', args: [Number(result.lastInsertRowid)]})).rows[0]
   return NextResponse.json(attachment)
 }

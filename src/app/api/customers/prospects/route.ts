@@ -4,9 +4,9 @@ import { getDb } from '@/lib/db'
 // Returns Klaviyo subscribers who have never placed a Shopify order.
 // These are warm leads — they know the brand but haven't converted yet.
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const prospects = db.prepare(`
+  const prospects = (await db.execute({sql: `
     SELECT DISTINCT
       kp.klaviyo_id,
       kp.email,
@@ -24,7 +24,7 @@ export async function GET() {
       )
     GROUP BY kp.klaviyo_id
     ORDER BY kp.created DESC
-  `).all() as {
+  `, args: []})).rows as unknown as {
     klaviyo_id: string
     email: string
     first_name: string | null

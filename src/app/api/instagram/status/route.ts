@@ -27,14 +27,12 @@ async function refreshToken(token: string): Promise<string | null> {
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
   // Ensure last_validated_at column exists (idempotent)
-  try { db.exec(`ALTER TABLE instagram_config ADD COLUMN last_validated_at TEXT`) } catch {}
+  try { await db.execute(`ALTER TABLE instagram_config ADD COLUMN last_validated_at TEXT`) } catch {}
 
-  const config = db.prepare(
-    'SELECT access_token, ig_user_id, username, connected_at, last_validated_at FROM instagram_config WHERE id = 1'
-  ).get() as IgConfig | undefined
+  const config = (await db.execute({sql: 'SELECT access_token, ig_user_id, username, connected_at, last_validated_at FROM instagram_config WHERE id = 1', args: []})).rows[0] as unknown as IgConfig | undefined
 
   if (!config) return NextResponse.json({ connected: false })
 
@@ -54,12 +52,10 @@ export async function GET() {
         // sometimes works on recently-expired tokens and will always work on valid ones)
         const recovered = await refreshToken(config.access_token)
         if (recovered) {
-          db.prepare(
-            "UPDATE instagram_config SET access_token = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1"
-          ).run(recovered)
+          await db.execute({sql: "UPDATE instagram_config SET access_token = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1", args: [recovered]})
           return NextResponse.json({ connected: true, username: config.username, ig_user_id: config.ig_user_id })
         }
-        db.prepare("UPDATE instagram_config SET last_validated_at = datetime('now') WHERE id = 1").run()
+        await db.execute({sql: "UPDATE instagram_config SET last_validated_at = datetime('now') WHERE id = 1", args: []})
         return NextResponse.json({ connected: false, reason: 'token_expired', ig_user_id: config.ig_user_id, username: config.username })
       }
 
@@ -72,14 +68,10 @@ export async function GET() {
         const newToken = await refreshToken(config.access_token)
         if (newToken) {
           currentToken = newToken
-          db.prepare(
-            "UPDATE instagram_config SET access_token = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1"
-          ).run(newToken)
+          await db.execute({sql: "UPDATE instagram_config SET access_token = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1", args: [newToken]})
         }
       } else {
-        db.prepare(
-          "UPDATE instagram_config SET last_validated_at = datetime('now') WHERE id = 1"
-        ).run()
+        await db.execute({sql: "UPDATE instagram_config SET last_validated_at = datetime('now') WHERE id = 1", args: []})
       }
 
       return NextResponse.json({
@@ -103,7 +95,7 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  const db = getDb()
-  db.prepare('DELETE FROM instagram_config WHERE id = 1').run()
+  const db = await getDb()
+  await db.execute({sql: 'DELETE FROM instagram_config WHERE id = 1', args: []})
   return NextResponse.json({ ok: true })
 }

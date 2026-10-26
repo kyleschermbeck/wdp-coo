@@ -15,11 +15,9 @@ const ACCOUNT_METRICS  = 'spend,reach,impressions,clicks,ctr,cpm,cpc,frequency,a
 const CAMPAIGN_METRICS = 'spend,reach,impressions,clicks,ctr,frequency,actions,action_values'
 const AD_METRICS       = 'ad_id,ad_name,campaign_name,spend,reach,impressions,clicks,ctr,frequency,actions,action_values'
 
-function getConfig(): MetaConfig | null {
-  const db = getDb()
-  return db.prepare(
-    'SELECT access_token, ad_account_id, account_name, app_id, app_secret, token_expiry FROM meta_ads_config WHERE id = 1'
-  ).get() as MetaConfig | null
+async function getConfig(): Promise<MetaConfig | null> {
+  const db = await getDb()
+  return (await db.execute({sql: 'SELECT access_token, ad_account_id, account_name, app_id, app_secret, token_expiry FROM meta_ads_config WHERE id = 1', args: []})).rows[0] as unknown as MetaConfig | null
 }
 
 // Try to refresh an expired token using app credentials; returns new token or null.
@@ -35,9 +33,8 @@ async function tryRefreshToken(config: MetaConfig): Promise<string | null> {
     const data = await res.json() as { access_token?: string; expires_in?: number }
     if (!data.access_token) return null
     const expiry = data.expires_in ? Date.now() + data.expires_in * 1000 : null
-    const db = getDb()
-    db.prepare('UPDATE meta_ads_config SET access_token = ?, token_expiry = ? WHERE id = 1')
-      .run(data.access_token, expiry)
+    const db = await getDb()
+    await db.execute({sql: 'UPDATE meta_ads_config SET access_token = ?, token_expiry = ? WHERE id = 1', args: [data.access_token, expiry]})
     return data.access_token
   } catch {
     return null
@@ -55,7 +52,7 @@ function sumActions(actions: Array<{ action_type: string; value: string }> | und
 }
 
 export async function GET(request: Request) {
-  const config = getConfig()
+  const config = await getConfig()
   if (!config) return NextResponse.json({ error: 'Meta Ads not connected' }, { status: 400 })
 
   // Check token expiry — try to refresh if app credentials exist, otherwise surface error

@@ -4,8 +4,8 @@ import { loadTokens } from '@/lib/gmail'
 
 export async function GET(req: NextRequest) {
   try {
-    const db = getDb()
-    const tokens = loadTokens()
+    const db = await getDb()
+    const tokens = await loadTokens()
     const connected = !!tokens?.refresh_token
 
     const category = req.nextUrl.searchParams.get('category')
@@ -26,23 +26,23 @@ export async function GET(req: NextRequest) {
       WHERE ${inboxConditions.join(' AND ')}
       ORDER BY e.date DESC
     `
-    const emails = db.prepare(inboxQuery).all(...inboxArgs)
+    const emails = (await db.execute({sql: inboxQuery, args: inboxArgs as (string | number | boolean | null | bigint)[]})).rows
 
     // Sent emails
-    const sent = db.prepare(`
+    const sent = (await db.execute({sql: `
       SELECT e.*, NULL as draft_body, NULL as draft_status, NULL as draft_id
       FROM email_cache e
       WHERE e.is_sent = 1
       ORDER BY e.date DESC
-    `).all()
+    `, args: []})).rows
 
     // Counts per category (inbox only, for tab badges)
-    const rawCounts = db.prepare(`
+    const rawCounts = (await db.execute({sql: `
       SELECT category, COUNT(*) as count
       FROM email_cache
       WHERE is_sent = 0
       GROUP BY category
-    `).all() as { category: string; count: number }[]
+    `, args: []})).rows as unknown as { category: string; count: number }[]
 
     const counts: Record<string, number> = {}
     for (const row of rawCounts) counts[row.category] = row.count

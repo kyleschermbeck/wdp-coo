@@ -14,9 +14,9 @@ interface CreateBody {
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const rows = db.prepare(`
+  const rows = (await db.execute({sql: `
     SELECT
       sp.id,
       sp.shopify_id,
@@ -32,7 +32,7 @@ export async function GET() {
     FROM shopify_products sp
     LEFT JOIN products p ON p.id = sp.product_id
     ORDER BY sp.title ASC
-  `).all() as {
+  `, args: []})).rows as unknown as {
     id: number
     shopify_id: string
     title: string
@@ -50,8 +50,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb()
-  const config = getShopifyConfig(db)
+  const db = await getDb()
+  const config = await getShopifyConfig(db)
   if (!config?.access_token) return NextResponse.json({ error: 'Shopify not connected' }, { status: 400 })
 
   const body = await req.json() as CreateBody
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     const inventoryItemId = product.variants?.[0]?.inventory_item_id
       ? String(product.variants[0].inventory_item_id) : null
 
-    db.prepare(`
+    await db.execute({sql: `
       INSERT INTO shopify_products
         (shopify_id, title, handle, status, inventory_quantity, inventory_item_id, raw)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -86,10 +86,7 @@ export async function POST(req: NextRequest) {
         inventory_quantity = excluded.inventory_quantity,
         inventory_item_id = excluded.inventory_item_id,
         raw = excluded.raw, synced_at = datetime('now')
-    `).run(
-      String(product.id), product.title, product.handle, product.status,
-      totalInventory, inventoryItemId, JSON.stringify(product),
-    )
+    `, args: [String(product.id), product.title, product.handle, product.status, totalInventory, inventoryItemId, JSON.stringify(product)]})
 
     return NextResponse.json({ ok: true, shopify_id: String(product.id), product })
   } catch (err) {

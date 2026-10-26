@@ -14,14 +14,12 @@ export interface Nudge {
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
   const nudges: Nudge[] = []
   const today = new Date().toISOString().slice(0, 10)
 
   // ── 1. Overdue tasks ──────────────────────────────────────────────────────
-  const overdue = db.prepare(
-    `SELECT id, title, due_date FROM tasks WHERE status != 'done' AND due_date < ? ORDER BY due_date LIMIT 3`
-  ).all(today) as { id: number; title: string; due_date: string }[]
+  const overdue = (await db.execute({sql: `SELECT id, title, due_date FROM tasks WHERE status != 'done' AND due_date < ? ORDER BY due_date LIMIT 3`, args: [today]})).rows as unknown as { id: number; title: string; due_date: string }[]
   if (overdue.length > 0) {
     nudges.push({
       id: 'overdue-tasks',
@@ -34,13 +32,13 @@ export async function GET() {
   }
 
   // ── 2. Critical inventory (negative or ≤ 3 units) ────────────────────────
-  const criticalStock = db.prepare(`
+  const criticalStock = (await db.execute({sql: `
     SELECT sp.title, sp.inventory_quantity
     FROM shopify_products sp
     WHERE sp.status = 'active' AND sp.is_bundle = 0 AND sp.inventory_quantity <= 3
     ORDER BY sp.inventory_quantity ASC
     LIMIT 4
-  `).all() as { title: string; inventory_quantity: number }[]
+  `, args: []})).rows as unknown as { title: string; inventory_quantity: number }[]
   if (criticalStock.length > 0) {
     const negative = criticalStock.filter(p => p.inventory_quantity < 0)
     const lines = criticalStock.map(p => {
@@ -62,9 +60,7 @@ export async function GET() {
 
   // ── 3. Open agent flags ───────────────────────────────────────────────────
   try {
-    const flags = db.prepare(
-      `SELECT item_name, reason, urgency FROM agent_flags WHERE status = 'open' AND urgency = 'high' ORDER BY created_at DESC LIMIT 2`
-    ).all() as { item_name: string; reason: string; urgency: string }[]
+    const flags = (await db.execute({sql: `SELECT item_name, reason, urgency FROM agent_flags WHERE status = 'open' AND urgency = 'high' ORDER BY created_at DESC LIMIT 2`, args: []})).rows as unknown as { item_name: string; reason: string; urgency: string }[]
     if (flags.length > 0) {
       nudges.push({
         id: 'open-flags',
@@ -79,9 +75,7 @@ export async function GET() {
 
   // ── 4. Email queue has drafts ─────────────────────────────────────────────
   try {
-    const pendingEmails = db.prepare(
-      `SELECT COUNT(*) as count FROM agent_email_queue WHERE status = 'pending_review'`
-    ).get() as { count: number }
+    const pendingEmails = (await db.execute({sql: `SELECT COUNT(*) as count FROM agent_email_queue WHERE status = 'pending_review'`, args: []})).rows[0] as unknown as { count: number }
     if (pendingEmails.count > 0) {
       nudges.push({
         id: 'email-queue',
@@ -96,13 +90,11 @@ export async function GET() {
 
   // ── 5. Email list not contacted recently ─────────────────────────────────
   try {
-    const lastCampaign = db.prepare(
-      `SELECT send_time FROM klaviyo_campaigns WHERE status = 'sent' ORDER BY send_time DESC LIMIT 1`
-    ).get() as { send_time: string } | undefined
+    const lastCampaign = (await db.execute({sql: `SELECT send_time FROM klaviyo_campaigns WHERE status = 'sent' ORDER BY send_time DESC LIMIT 1`, args: []})).rows[0] as unknown as { send_time: string } | undefined
     if (lastCampaign) {
       const daysSince = Math.floor((Date.now() - new Date(lastCampaign.send_time).getTime()) / (1000 * 60 * 60 * 24))
       if (daysSince >= 10) {
-        const listSize = db.prepare('SELECT SUM(profile_count) as t FROM klaviyo_lists').get() as { t: number | null }
+        const listSize = (await db.execute({sql: 'SELECT SUM(profile_count) as t FROM klaviyo_lists', args: []})).rows[0] as unknown as { t: number | null }
         nudges.push({
           id: 'email-gap',
           type: 'suggestion',
@@ -117,15 +109,15 @@ export async function GET() {
 
   // ── 6. Revenue below pace ─────────────────────────────────────────────────
   try {
-    const thisWeek = db.prepare(`
+    const thisWeek = (await db.execute({sql: `
       SELECT ROUND(SUM(total_price), 2) as rev
       FROM shopify_orders WHERE financial_status = 'paid' AND created_at >= datetime('now', '-7 days')
-    `).get() as { rev: number | null }
-    const lastWeek = db.prepare(`
+    `, args: []})).rows[0] as unknown as { rev: number | null }
+    const lastWeek = (await db.execute({sql: `
       SELECT ROUND(SUM(total_price), 2) as rev
       FROM shopify_orders WHERE financial_status = 'paid'
         AND created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days')
-    `).get() as { rev: number | null }
+    `, args: []})).rows[0] as unknown as { rev: number | null }
     const tw = thisWeek.rev ?? 0
     const lw = lastWeek.rev ?? 0
     if (lw > 0 && tw < lw * 0.6) {
@@ -143,9 +135,7 @@ export async function GET() {
 
   // ── 7. Urgent tasks ───────────────────────────────────────────────────────
   if (overdue.length === 0) {
-    const urgent = db.prepare(
-      `SELECT title FROM tasks WHERE status != 'done' AND priority = 'urgent' LIMIT 2`
-    ).all() as { title: string }[]
+    const urgent = (await db.execute({sql: `SELECT title FROM tasks WHERE status != 'done' AND priority = 'urgent' LIMIT 2`, args: []})).rows as unknown as { title: string }[]
     if (urgent.length > 0) {
       nudges.push({
         id: 'urgent-tasks',

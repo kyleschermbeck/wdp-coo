@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const db = getDb()
+  const db = await getDb()
   const { id } = await params
   const body = await req.json()
   const { name, vendor, order_url, package_weight, package_extra_oz, serving_size, serving_unit, total_servings, package_cost, category, active } = body
@@ -27,43 +27,31 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
-  db.prepare(`
+  await db.execute({sql: `
     UPDATE supplies SET name=?, vendor=?, order_url=?, package_weight=?, weight_unit='lb',
     package_extra_oz=?, serving_size=?, serving_unit=?, total_servings=?,
     package_cost=?, oz_per_tbsp=?, category=?, active=?, updated_at=datetime('now')
     WHERE id=?
-  `).run(
-    name?.trim() || null, vendor || null, order_url || null,
-    pkgLbs,
-    pkgExtraOz,
-    servSize,
-    servUnit,
-    totalServings,
-    pkgCost,
-    ozPerTbsp,
-    category || 'product',
-    active === false ? 0 : 1,
-    id
-  )
-  const row = db.prepare('SELECT * FROM supplies WHERE id = ?').get(id)
+  `, args: [name?.trim() || null, vendor || null, order_url || null, pkgLbs, pkgExtraOz, servSize, servUnit, totalServings, pkgCost, ozPerTbsp, category || 'product', active === false ? 0 : 1, id]})
+  const row = (await db.execute({sql: 'SELECT * FROM supplies WHERE id = ?', args: [id]})).rows[0]
   return NextResponse.json(row)
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const db = getDb()
+  const db = await getDb()
   const { id } = await params
   const body = await req.json()
   if ('containers_on_hand' in body) {
     const val = Math.max(0, parseFloat(body.containers_on_hand) || 0)
-    db.prepare(`UPDATE supplies SET containers_on_hand = ? WHERE id = ?`).run(val, id)
+    await db.execute({sql: `UPDATE supplies SET containers_on_hand = ? WHERE id = ?`, args: [val, id]})
   }
-  const row = db.prepare('SELECT * FROM supplies WHERE id = ?').get(id)
+  const row = (await db.execute({sql: 'SELECT * FROM supplies WHERE id = ?', args: [id]})).rows[0]
   return NextResponse.json(row)
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const db = getDb()
+  const db = await getDb()
   const { id } = await params
-  db.prepare('DELETE FROM supplies WHERE id = ?').run(id)
+  await db.execute({sql: 'DELETE FROM supplies WHERE id = ?', args: [id]})
   return NextResponse.json({ ok: true })
 }

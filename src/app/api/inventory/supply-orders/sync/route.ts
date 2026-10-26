@@ -213,11 +213,11 @@ function matchSupply(description: string, supplies: SupplyRow[]): number | null 
 }
 
 export async function POST() {
-  const db = getDb()
+  const db = await getDb()
   const gmail = await getGmailClient()
   if (!gmail) return NextResponse.json({ error: 'Gmail not connected' }, { status: 400 })
 
-  const supplies = db.prepare(`SELECT id, name FROM supplies WHERE active = 1`).all() as SupplyRow[]
+  const supplies = (await db.execute({sql: `SELECT id, name FROM supplies WHERE active = 1`, args: []})).rows as unknown as SupplyRow[]
 
   const query = 'from:uline.com OR from:inkwave.com OR from:auto-confirm@amazon.com OR from:ship-confirm@amazon.com newer_than:180d'
   const listRes = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 50 })
@@ -226,30 +226,18 @@ export async function POST() {
   if (msgs.length === 0) return NextResponse.json({ synced: 0, skipped: 0, found: 0 })
 
   const existingGmailIds = new Set(
-    (db.prepare(`SELECT gmail_id FROM supply_orders`).all() as { gmail_id: string }[]).map(r => r.gmail_id)
+    ((await db.execute({sql: `SELECT gmail_id FROM supply_orders`, args: []})).rows as unknown as { gmail_id: string }[]).map(r => r.gmail_id)
   )
 
-  const existingByOrderNumber = db.prepare(`
+  const existingByOrderNumber = (await db.execute({sql: `
     SELECT id, status, order_number FROM supply_orders WHERE order_number IS NOT NULL AND status != 'skipped'
-  `).all() as { id: number; status: string; order_number: string }[]
+  `, args: []})).rows as unknown as { id: number; status: string; order_number: string }[]
   const orderNumberMap = new Map(existingByOrderNumber.map(r => [r.order_number, r]))
 
-  const insertOrder = db.prepare(`
-    INSERT INTO supply_orders (gmail_id, vendor, order_number, order_date, estimated_delivery, tracking_number, status, subject)
-    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
-  `)
-  const insertItem = db.prepare(`
-    INSERT INTO supply_order_items (supply_order_id, supply_id, description, qty, unit)
-    VALUES (?, ?, ?, ?, ?)
-  `)
-  const updateOrderStatus = db.prepare(`
-    UPDATE supply_orders SET status = ?, tracking_number = COALESCE(?, tracking_number) WHERE id = ?
-  `)
-
-  const insertSkipped = db.prepare(`
-    INSERT OR IGNORE INTO supply_orders (gmail_id, vendor, order_number, status, subject)
-    VALUES (?, 'unknown', null, 'skipped', ?)
-  `)
+  const insertOrderSql = `INSERT INTO supply_orders (gmail_id, vendor, order_number, order_date, estimated_delivery, tracking_number, status, subject) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`
+  const insertItemSql = `INSERT INTO supply_order_items (supply_order_id, supply_id, description, qty, unit) VALUES (?, ?, ?, ?, ?)`
+  const updateOrderStatusSql = `UPDATE supply_orders SET status = ?, tracking_number = COALESCE(?, tracking_number) WHERE id = ?`
+  const insertSkippedSql = `INSERT OR IGNORE INTO supply_orders (gmail_id, vendor, order_number, status, subject) VALUES (?, 'unknown', null, 'skipped', ?)`
 
   let synced = 0, skipped = 0, updated = 0
 
@@ -268,7 +256,7 @@ export async function POST() {
 
     const parsed = parseOrder(subject, bodyText, fromRaw)
     if (!parsed) {
-      insertSkipped.run(msg.id, subject)
+      await db.execute({ sql: insertSkippedSql, args: [msg.id, subject] })
       skipped++
       continue
     }
@@ -280,23 +268,20 @@ export async function POST() {
       const statusRank: Record<string, number> = { pending: 0, partial: 1, shipped: 2, delivered: 3 }
       const newStatus = parsed.isDelivered ? 'delivered' : parsed.isShipped ? 'shipped' : null
       if (newStatus && (statusRank[newStatus] ?? 0) > (statusRank[existing.status] ?? 0)) {
-        updateOrderStatus.run(newStatus, parsed.tracking_number, existing.id)
+        await db.execute({ sql: updateOrderStatusSql, args: [newStatus, parsed.tracking_number, existing.id] })
         updated++
       }
       // Record this gmail_id so it won't be re-processed
-      insertSkipped.run(msg.id, subject)
+      await db.execute({ sql: insertSkippedSql, args: [msg.id, subject] })
       continue
     }
 
-    const result = insertOrder.run(
-      msg.id, parsed.vendor, parsed.order_number, parsed.order_date,
-      parsed.estimated_delivery, parsed.tracking_number, subject
-    ) as { lastInsertRowid: number | bigint }
+    const result = await db.execute({ sql: insertOrderSql, args: [msg.id, parsed.vendor, parsed.order_number, parsed.order_date, parsed.estimated_delivery, parsed.tracking_number, subject] })
     const orderId = Number(result.lastInsertRowid)
 
     for (const item of parsed.items) {
       const supplyId = matchSupply(item.description, supplies)
-      insertItem.run(orderId, supplyId, item.description, item.qty, item.unit)
+      await db.execute({ sql: insertItemSql, args: [orderId, supplyId, item.description, item.qty, item.unit] })
     }
     synced++
   }

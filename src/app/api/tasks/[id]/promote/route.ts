@@ -20,21 +20,19 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
     const taskId = parseInt(id, 10)
     if (isNaN(taskId)) return NextResponse.json({ error: 'Invalid task id' }, { status: 400 })
 
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as {
+    const task = (await db.execute({sql: 'SELECT * FROM tasks WHERE id = ?', args: [taskId]})).rows[0] as unknown as {
       id: number; title: string; description: string | null; notes: string | null
       status: string; priority: string; due_date: string | null; project_id: number | null
     } | undefined
 
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
-    const subtasks = db.prepare(
-      'SELECT * FROM subtasks WHERE task_id = ? ORDER BY sort_order ASC, id ASC'
-    ).all(taskId) as {
+    const subtasks = (await db.execute({sql: 'SELECT * FROM subtasks WHERE task_id = ? ORDER BY sort_order ASC, id ASC', args: [taskId]})).rows as unknown as {
       id: number; title: string; notes: string | null; due_date: string | null; status: string
     }[]
 
@@ -42,31 +40,25 @@ export async function POST(
     const descParts = [task.description, task.notes].filter(Boolean)
     const projectDescription = descParts.length > 0 ? descParts.join('\n\n') : null
 
-    const promote = db.transaction(() => {
-      // 1. Create the project
-      const projectResult = db.prepare(`
-        INSERT INTO projects (name, description, status, color, due_date)
-        VALUES (?, ?, ?, 'sage', ?)
-      `).run(task.title, projectDescription, mapStatus(task.status), task.due_date ?? null)
+    // 1. Create the project
+    const projectResult = await db.execute({sql: `
+      INSERT INTO projects (name, description, status, color, due_date)
+      VALUES (?, ?, ?, 'sage', ?)
+    `, args: [task.title, projectDescription, mapStatus(task.status), task.due_date ?? null]})
 
-      const newProjectId = projectResult.lastInsertRowid as number
+    const newProjectId = Number(projectResult.lastInsertRowid) as number
 
-      // 2. Convert subtasks → tasks in the new project
-      for (const s of subtasks) {
-        db.prepare(`
-          INSERT INTO tasks (project_id, title, notes, status, priority, due_date)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(newProjectId, s.title, s.notes ?? null, s.status, task.priority, s.due_date ?? null)
-      }
+    // 2. Convert subtasks → tasks in the new project
+    for (const s of subtasks) {
+      await db.execute({sql: `
+        INSERT INTO tasks (project_id, title, notes, status, priority, due_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, args: [newProjectId, s.title, s.notes ?? null, s.status, task.priority, s.due_date ?? null]})
+    }
 
-      // 3. Delete the original task (subtasks cascade)
-      db.prepare('DELETE FROM tasks WHERE id = ?').run(taskId)
-
-      return newProjectId
-    })
-
-    const newProjectId = promote()
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(newProjectId)
+    // 3. Delete the original task (subtasks cascade)
+    await db.execute({sql: 'DELETE FROM tasks WHERE id = ?', args: [taskId]})
+    const project = (await db.execute({sql: 'SELECT * FROM projects WHERE id = ?', args: [newProjectId]})).rows[0]
     return NextResponse.json({ ok: true, project_id: newProjectId, project })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

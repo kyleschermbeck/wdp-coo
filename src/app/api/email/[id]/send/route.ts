@@ -4,11 +4,11 @@ import { sendReply } from '@/lib/gmail'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
     const { draft_id, draft_body, signatureHtml, fromName, fromEmail } = await req.json()
 
-    const email = db.prepare('SELECT * FROM email_cache WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    const email = (await db.execute({sql: 'SELECT * FROM email_cache WHERE id = ?', args: [id]})).rows[0] as unknown as Record<string, unknown> | undefined
     if (!email) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     await sendReply(
@@ -22,8 +22,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       fromEmail ?? undefined,
     )
 
-    db.prepare('UPDATE email_drafts SET status = ? WHERE id = ?').run('sent', draft_id)
-    db.prepare('UPDATE email_cache SET is_read = 1 WHERE id = ?').run(id)
+    await db.execute({sql: 'UPDATE email_drafts SET status = ? WHERE id = ?', args: ['sent', draft_id]})
+    await db.execute({sql: 'UPDATE email_cache SET is_read = 1 WHERE id = ?', args: [id]})
 
     return NextResponse.json({ ok: true })
   } catch (err) {

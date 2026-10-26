@@ -7,9 +7,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const postId = searchParams.get('post_id')
 
-  const db = getDb()
-  const config = db.prepare('SELECT access_token, ig_user_id FROM instagram_config WHERE id = 1').get() as
-    | { access_token: string; ig_user_id: string } | undefined
+  const db = await getDb()
+  const config = (await db.execute({sql: 'SELECT access_token, ig_user_id FROM instagram_config WHERE id = 1', args: []})).rows[0] as
+    unknown as | { access_token: string; ig_user_id: string } | undefined
   if (!config) return NextResponse.json({ error: 'Not connected' }, { status: 400 })
 
   const { access_token: token, ig_user_id } = config

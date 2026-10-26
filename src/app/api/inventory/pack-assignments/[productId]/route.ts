@@ -9,15 +9,15 @@ interface AssignmentRow {
 // GET: all current assignments for a product
 export async function GET(_: NextRequest, { params }: { params: Promise<{ productId: string }> }) {
   const { productId } = await params
-  const db = getDb()
+  const db = await getDb()
 
-  const assignments = db.prepare(`
+  const assignments = (await db.execute({sql: `
     SELECT order_number, SUM(qty) as qty
     FROM pack_assignments
     WHERE shopify_product_id = ?
     GROUP BY order_number
     ORDER BY order_number
-  `).all(productId) as AssignmentRow[]
+  `, args: [productId]})).rows as unknown as AssignmentRow[]
 
   const totalAssigned = assignments.reduce((s, r) => s + r.qty, 0)
 
@@ -34,15 +34,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ prod
     return NextResponse.json({ error: 'assignments array required' }, { status: 400 })
   }
 
-  const db = getDb()
+  const db = await getDb()
 
-  db.transaction(() => {
-    db.prepare(`DELETE FROM pack_assignments WHERE shopify_product_id = ?`).run(productId)
-    const insert = db.prepare(`INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`)
-    for (const a of assignments) {
-      if (a.qty > 0) insert.run(productId, a.orderNumber, a.qty)
-    }
-  })()
+  await db.execute({ sql: `DELETE FROM pack_assignments WHERE shopify_product_id = ?`, args: [productId] })
+  for (const a of assignments) {
+    if (a.qty > 0) await db.execute({ sql: `INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`, args: [productId, a.orderNumber, a.qty] })
+  }
 
   return NextResponse.json({ ok: true })
 }

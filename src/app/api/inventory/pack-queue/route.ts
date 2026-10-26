@@ -42,19 +42,17 @@ interface IngredientRow {
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT id, order_number, line_items, created_at
     FROM shopify_orders
     WHERE fulfillment_status IS NULL OR fulfillment_status IN ('unfulfilled', 'partial')
     ORDER BY created_at ASC
-  `).all() as OrderRow[]
+  `, args: []})).rows as unknown as OrderRow[]
 
   // Load all active non-bundle products first so we can resolve bundle properties by title
-  const allProducts = db.prepare(
-    `SELECT shopify_id, title FROM shopify_products WHERE status = 'active' AND is_bundle = 0`
-  ).all() as ProductRow[]
+  const allProducts = (await db.execute({sql: `SELECT shopify_id, title FROM shopify_products WHERE status = 'active' AND is_bundle = 0`, args: []})).rows as unknown as ProductRow[]
 
   const titleToShopifyId: Record<string, string> = {}
   for (const p of allProducts) titleToShopifyId[p.title] = p.shopify_id
@@ -122,7 +120,7 @@ export async function GET() {
   for (const p of allProducts) idToTitle[p.shopify_id] = p.title
   for (const [title, data] of Object.entries(byBlend)) idToTitle[data.shopifyId] = title
 
-  const labeledJarsRows = db.prepare(`SELECT shopify_product_id, qty FROM labeled_jars`).all() as LabeledJarsRow[]
+  const labeledJarsRows = (await db.execute({sql: `SELECT shopify_product_id, qty FROM labeled_jars`, args: []})).rows as unknown as LabeledJarsRow[]
   const labeledJarsMap: Record<string, number> = {}
   for (const r of labeledJarsRows) labeledJarsMap[r.shopify_product_id] = r.qty
 
@@ -130,13 +128,13 @@ export async function GET() {
   // For each ingredient: tbspPerContainer = total_oz / oz_per_tbsp
   //   maxJarsFromIngredient = floor(containers_on_hand * tbspPerContainer / tbsp_per_jar)
   // The limiting ingredient determines canFill for that product
-  const ingredients = db.prepare(`
+  const ingredients = (await db.execute({sql: `
     SELECT pi.shopify_product_id, pi.supply_id, pi.tbsp,
            s.containers_on_hand,
            s.package_weight, s.package_extra_oz, s.oz_per_tbsp
     FROM product_ingredients pi
     JOIN supplies s ON s.id = pi.supply_id
-  `).all() as IngredientRow[]
+  `, args: []})).rows as unknown as IngredientRow[]
 
   // Group ingredients by product
   const ingredientsByProduct: Record<string, IngredientRow[]> = {}
@@ -163,7 +161,7 @@ export async function GET() {
       if (maxFromThis < canFill) {
         canFill = maxFromThis
         // Look up supply name for display
-        const supplyRow = db.prepare(`SELECT name FROM supplies WHERE id = ?`).get(ing.supply_id) as { name: string } | undefined
+        const supplyRow = (await db.execute({sql: `SELECT name FROM supplies WHERE id = ?`, args: [ing.supply_id]})).rows[0] as unknown as { name: string } | undefined
         limitingName = supplyRow?.name ?? null
       }
     }

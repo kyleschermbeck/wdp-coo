@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db'
 import { syncKlaviyoData } from '@/lib/klaviyo'
 
 export async function POST() {
-  const db = getDb()
+  const db = await getDb()
   try {
     const result = await syncKlaviyoData(db)
     return NextResponse.json(result)

@@ -4,9 +4,9 @@ import { generateDraft } from '@/lib/ai'
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
-    const email = db.prepare('SELECT * FROM email_cache WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    const email = (await db.execute({sql: 'SELECT * FROM email_cache WHERE id = ?', args: [id]})).rows[0] as unknown as Record<string, unknown> | undefined
     if (!email) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const { draft, usage } = await generateDraft(
@@ -16,18 +16,14 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
       (email.body_text as string) || (email.snippet as string),
     )
 
-    db.prepare('DELETE FROM email_drafts WHERE email_id = ? AND status = ?').run(id, 'pending')
+    await db.execute({sql: 'DELETE FROM email_drafts WHERE email_id = ? AND status = ?', args: [id, 'pending']})
 
-    const result = db.prepare(
-      'INSERT INTO email_drafts (email_id, draft_body, status) VALUES (?, ?, ?)'
-    ).run(id, draft, 'pending')
+    const result = await db.execute({sql: 'INSERT INTO email_drafts (email_id, draft_body, status) VALUES (?, ?, ?)', args: [id, draft, 'pending']})
 
-    db.prepare(
-      'INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)'
-    ).run('draft', 'claude-sonnet-4-6', usage.input_tokens, usage.output_tokens)
+    await db.execute({sql: 'INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)', args: ['draft', 'claude-sonnet-4-6', usage.input_tokens, usage.output_tokens]})
 
     return NextResponse.json({
-      id: result.lastInsertRowid,
+      id: Number(result.lastInsertRowid),
       email_id: Number(id),
       draft_body: draft,
       status: 'pending',
@@ -39,10 +35,10 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
     const { draft_id, draft_body } = await req.json()
-    db.prepare('UPDATE email_drafts SET draft_body = ? WHERE id = ? AND email_id = ?').run(draft_body, draft_id, id)
+    await db.execute({sql: 'UPDATE email_drafts SET draft_body = ? WHERE id = ? AND email_id = ?', args: [draft_body, draft_id, id]})
     return NextResponse.json({ ok: true })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

@@ -51,19 +51,17 @@ interface AssignmentRow {
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT id, shopify_id, order_number, email, total_price,
            fulfillment_status, financial_status, line_items, created_at
     FROM shopify_orders
     WHERE fulfillment_status IS NULL OR fulfillment_status IN ('unfulfilled', 'partial')
     ORDER BY created_at ASC
-  `).all() as OrderRow[]
+  `, args: []})).rows as unknown as OrderRow[]
 
-  const products = db.prepare(
-    `SELECT shopify_id, title, inventory_quantity FROM shopify_products WHERE status != 'archived'`
-  ).all() as (ProductStock & { title: string })[]
+  const products = (await db.execute({sql: `SELECT shopify_id, title, inventory_quantity FROM shopify_products WHERE status != 'archived'`, args: []})).rows as unknown as (ProductStock & { title: string })[]
 
   // Use raw inventory_quantity (can be negative = behind on packing)
   const stockMap: Record<string, number> = {}
@@ -113,10 +111,10 @@ export async function GET() {
   }
 
   // Load stored manual assignments (sum by product+order in case of multiple runs)
-  const assignmentRows = db.prepare(`
+  const assignmentRows = (await db.execute({sql: `
     SELECT shopify_product_id, order_number, SUM(qty) as qty
     FROM pack_assignments GROUP BY shopify_product_id, order_number
-  `).all() as AssignmentRow[]
+  `, args: []})).rows as unknown as AssignmentRow[]
 
   // { productId -> { orderNumber -> assignedQty } }
   const storedAssignments: Record<string, Record<number, number>> = {}

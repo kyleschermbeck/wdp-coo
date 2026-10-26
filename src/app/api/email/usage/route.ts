@@ -9,16 +9,16 @@ const ANTHROPIC_PRICING: Record<string, { input: number; output: number }> = {
 
 export async function GET() {
   try {
-    const db = getDb()
+    const db = await getDb()
 
-    const rows = db.prepare(`
+    const rows = (await db.execute({sql: `
       SELECT operation, model,
         SUM(input_tokens) as input_tokens,
         SUM(output_tokens) as output_tokens,
         COUNT(*) as call_count
       FROM api_usage
       GROUP BY operation, model
-    `).all() as { operation: string; model: string; input_tokens: number; output_tokens: number; call_count: number }[]
+    `, args: []})).rows as unknown as { operation: string; model: string; input_tokens: number; output_tokens: number; call_count: number }[]
 
     let total_input = 0
     let total_output = 0

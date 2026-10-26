@@ -29,8 +29,8 @@ interface PatchBody {
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params  // shopify_id
-  const db = getDb()
-  const config = getShopifyConfig(db)
+  const db = await getDb()
+  const config = await getShopifyConfig(db)
   if (!config?.access_token) return NextResponse.json({ error: 'Shopify not connected' }, { status: 400 })
 
   const body = await req.json() as PatchBody
@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.status !== undefined)  { updates.push('status = ?'); vals.push(body.status) }
 
       // Merge remaining fields into raw JSON
-      const row = db.prepare(`SELECT raw FROM shopify_products WHERE shopify_id = ?`).get(id) as { raw: string } | undefined
+      const row = (await db.execute({sql: `SELECT raw FROM shopify_products WHERE shopify_id = ?`, args: [id]})).rows[0] as unknown as { raw: string } | undefined
       if (row) {
         const raw = JSON.parse(row.raw) as Record<string, unknown>
         for (const k of (['body_html', 'tags', 'product_type', 'vendor'] as const)) {
@@ -65,7 +65,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
 
       if (updates.length > 0) {
-        db.prepare(`UPDATE shopify_products SET ${updates.join(', ')} WHERE shopify_id = ?`).run(...vals, id)
+        await db.execute({sql: `UPDATE shopify_products SET ${updates.join(', ')} WHERE shopify_id = ?`, args: [...vals, id] as (string | number | boolean | null | bigint)[]})
       }
     } catch (err) {
       errors.push(`product: ${(err as Error).message}`)
@@ -92,13 +92,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!res.ok) throw new Error(`variant update failed (${res.status})`)
 
       // Merge into raw JSON cache
-      const row = db.prepare(`SELECT raw FROM shopify_products WHERE shopify_id = ?`).get(id) as { raw: string } | undefined
+      const row = (await db.execute({sql: `SELECT raw FROM shopify_products WHERE shopify_id = ?`, args: [id]})).rows[0] as unknown as { raw: string } | undefined
       if (row) {
         const raw = JSON.parse(row.raw) as { variants: Array<Record<string, unknown>> }
         raw.variants = raw.variants.map(v =>
           String(v.id) === body.variant_id ? { ...v, ...variantPatch } : v
         )
-        db.prepare(`UPDATE shopify_products SET raw = ? WHERE shopify_id = ?`).run(JSON.stringify(raw), id)
+        await db.execute({sql: `UPDATE shopify_products SET raw = ? WHERE shopify_id = ?`, args: [JSON.stringify(raw), id]})
       }
     } catch (err) {
       errors.push(`variant: ${(err as Error).message}`)
@@ -108,7 +108,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // ── Inventory qty → Shopify inventory API ──────────────────────────────────
   if (body.inventory_qty !== undefined && body.inventory_item_id) {
     try {
-      let locationId = (db.prepare(`SELECT shopify_id FROM shopify_locations WHERE active = 1 LIMIT 1`).get() as { shopify_id: string } | undefined)?.shopify_id
+      let locationId = ((await db.execute({sql: `SELECT shopify_id FROM shopify_locations WHERE active = 1 LIMIT 1`, args: []})).rows[0] as unknown as { shopify_id: string } | undefined)?.shopify_id
       if (!locationId) {
         const locs = await fetchLocations(config)
         const active = locs.find(l => l.active)
@@ -116,7 +116,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         locationId = String(active.id)
       }
       await updateInventoryLevel(config, body.inventory_item_id, locationId, body.inventory_qty)
-      db.prepare(`UPDATE shopify_products SET inventory_quantity = ? WHERE shopify_id = ?`).run(body.inventory_qty, id)
+      await db.execute({sql: `UPDATE shopify_products SET inventory_quantity = ? WHERE shopify_id = ?`, args: [body.inventory_qty, id]})
     } catch (err) {
       errors.push(`inventory: ${(err as Error).message}`)
     }
@@ -138,31 +138,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Always save cost locally so COGS calculations match the inventory page exactly
     const costNum = parseFloat(body.inventory_item_cost)
     if (!isNaN(costNum)) {
-      db.prepare(`
+      await db.execute({sql: `
         INSERT INTO product_local (shopify_product_id, cost_per_unit)
         VALUES (?, ?)
         ON CONFLICT(shopify_product_id) DO UPDATE SET cost_per_unit = excluded.cost_per_unit
-      `).run(id, costNum)
+      `, args: [id, costNum]})
     }
   }
 
   // ── is_bundle → local DB only ──────────────────────────────────────────────
   if (body.is_bundle !== undefined) {
-    db.prepare(`UPDATE shopify_products SET is_bundle = ? WHERE shopify_id = ?`).run(body.is_bundle, id)
+    await db.execute({sql: `UPDATE shopify_products SET is_bundle = ? WHERE shopify_id = ?`, args: [body.is_bundle, id]})
   }
 
   // ── Reorder threshold → local DB only ─────────────────────────────────────
   if (body.reorder_threshold !== undefined) {
-    db.prepare(`
+    await db.execute({sql: `
       INSERT INTO shopify_inventory_settings (shopify_product_id, reorder_threshold)
       VALUES (?, ?)
       ON CONFLICT(shopify_product_id) DO UPDATE SET reorder_threshold = excluded.reorder_threshold
-    `).run(id, body.reorder_threshold)
+    `, args: [id, body.reorder_threshold]})
   }
 
   // ── Accent color → local DB only ──────────────────────────────────────────
   if (body.accent_color !== undefined) {
-    db.prepare(`UPDATE shopify_products SET accent_color = ? WHERE shopify_id = ?`).run(body.accent_color, id)
+    await db.execute({sql: `UPDATE shopify_products SET accent_color = ? WHERE shopify_id = ?`, args: [body.accent_color, id]})
   }
 
   if (errors.length > 0) {

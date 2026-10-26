@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3'
+import type { Client } from '@libsql/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,8 +50,8 @@ export interface KlaviyoSyncResult {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-export function getKlaviyoConfig(db: Database.Database): KlaviyoConfig | null {
-  const row = db.prepare('SELECT * FROM klaviyo_config WHERE id = 1').get() as KlaviyoConfig | undefined
+export async function getKlaviyoConfig(db: Client): Promise<KlaviyoConfig | null> {
+  const row = (await db.execute({sql: 'SELECT * FROM klaviyo_config WHERE id = 1', args: []})).rows[0] as unknown as KlaviyoConfig | undefined
   return row ?? null
 }
 
@@ -413,89 +413,48 @@ export async function fetchCampaignMetrics(
 
 // ─── Main sync ─────────────────────────────────────────────────────────────────
 
-export async function syncKlaviyoData(db: Database.Database): Promise<KlaviyoSyncResult> {
-  const config = getKlaviyoConfig(db)
+export async function syncKlaviyoData(db: Client): Promise<KlaviyoSyncResult> {
+  const config = await getKlaviyoConfig(db)
   if (!config) throw new Error('Klaviyo not configured')
   const { api_key } = config
 
   // ── Account ──
   const account = await testKlaviyoConnection(api_key)
-  db.prepare(`UPDATE klaviyo_config SET account_name = ? WHERE id = 1`).run(account.name)
+  await db.execute({sql: `UPDATE klaviyo_config SET account_name = ? WHERE id = 1`, args: [account.name]})
 
   // ── Lists ──
   const lists = await fetchKlaviyoLists(api_key)
-  const upsertList = db.prepare(`
-    INSERT INTO klaviyo_lists (klaviyo_id, name, profile_count)
-    VALUES (?, ?, ?)
-    ON CONFLICT(klaviyo_id) DO UPDATE SET
-      name = excluded.name, profile_count = excluded.profile_count, synced_at = datetime('now')
-  `)
-  db.transaction(() => {
-    for (const l of lists) upsertList.run(l.id, l.name, l.profile_count)
-  })()
+  const upsertListSql = `INSERT INTO klaviyo_lists (klaviyo_id, name, profile_count) VALUES (?, ?, ?) ON CONFLICT(klaviyo_id) DO UPDATE SET name = excluded.name, profile_count = excluded.profile_count, synced_at = datetime('now')`
+  for (const l of lists) await db.execute({ sql: upsertListSql, args: [l.id, l.name, l.profile_count] })
 
   // ── Campaigns ──
   const campaigns = await fetchKlaviyoCampaigns(api_key)
-  const upsertCampaign = db.prepare(`
-    INSERT INTO klaviyo_campaigns (klaviyo_id, name, status, subject, from_email, send_time)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(klaviyo_id) DO UPDATE SET
-      name = excluded.name, status = excluded.status, subject = excluded.subject,
-      from_email = excluded.from_email, send_time = excluded.send_time, synced_at = datetime('now')
-  `)
-  db.transaction(() => {
-    for (const c of campaigns) upsertCampaign.run(c.id, c.name, c.status, c.subject, c.from_email, c.send_time)
-  })()
+  const upsertCampaignSql = `INSERT INTO klaviyo_campaigns (klaviyo_id, name, status, subject, from_email, send_time) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(klaviyo_id) DO UPDATE SET name = excluded.name, status = excluded.status, subject = excluded.subject, from_email = excluded.from_email, send_time = excluded.send_time, synced_at = datetime('now')`
+  for (const c of campaigns) await db.execute({ sql: upsertCampaignSql, args: [c.id, c.name, c.status, c.subject, c.from_email, c.send_time] })
 
   // ── Per-campaign metrics (only for sent campaigns) ──
   const sentCampaigns = campaigns.filter(c => c.status === 'Sent' || c.status === 'sent')
   if (sentCampaigns.length > 0) {
     const metricIds = await fetchAllMetricIds(api_key)
-    const upsertCampaignMetrics = db.prepare(`
-      UPDATE klaviyo_campaigns SET
-        recipients = ?, opens = ?, unique_opens = ?,
-        clicks = ?, unique_clicks = ?, revenue = ?,
-        unsubscribes = ?, open_rate = ?, click_rate = ?,
-        synced_at = datetime('now')
-      WHERE klaviyo_id = ?
-    `)
+    const upsertCampaignMetricsSql = `UPDATE klaviyo_campaigns SET recipients = ?, opens = ?, unique_opens = ?, clicks = ?, unique_clicks = ?, revenue = ?, unsubscribes = ?, open_rate = ?, click_rate = ?, synced_at = datetime('now') WHERE klaviyo_id = ?`
     for (const c of sentCampaigns) {
       if (!c.send_time) continue
       try {
         const m = await fetchCampaignMetrics(api_key, c.id, c.send_time, metricIds)
-        upsertCampaignMetrics.run(
-          m.recipients, m.opens, m.unique_opens,
-          m.clicks, m.unique_clicks, m.revenue,
-          m.unsubscribes, m.open_rate, m.click_rate,
-          c.id,
-        )
+        await db.execute({ sql: upsertCampaignMetricsSql, args: [m.recipients, m.opens, m.unique_opens, m.clicks, m.unique_clicks, m.revenue, m.unsubscribes, m.open_rate, m.click_rate, c.id] })
       } catch { /* skip individual failures */ }
     }
   }
 
   // ── Flows ──
   const flows = await fetchKlaviyoFlows(api_key)
-  const upsertFlow = db.prepare(`
-    INSERT INTO klaviyo_flows (klaviyo_id, name, status, trigger_type, created, updated)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(klaviyo_id) DO UPDATE SET
-      name = excluded.name, status = excluded.status, trigger_type = excluded.trigger_type,
-      updated = excluded.updated, synced_at = datetime('now')
-  `)
-  db.transaction(() => {
-    for (const f of flows) upsertFlow.run(f.id, f.name, f.status, f.trigger_type, f.created, f.updated)
-  })()
+  const upsertFlowSql = `INSERT INTO klaviyo_flows (klaviyo_id, name, status, trigger_type, created, updated) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(klaviyo_id) DO UPDATE SET name = excluded.name, status = excluded.status, trigger_type = excluded.trigger_type, updated = excluded.updated, synced_at = datetime('now')`
+  for (const f of flows) await db.execute({ sql: upsertFlowSql, args: [f.id, f.name, f.status, f.trigger_type, f.created, f.updated] })
 
   // ── Profiles + list memberships (fetch per list) ──
-  const upsertProfile = db.prepare(`
-    INSERT INTO klaviyo_profiles (klaviyo_id, email, first_name, last_name, phone, created, updated)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(klaviyo_id) DO UPDATE SET
-      email = excluded.email, first_name = excluded.first_name, last_name = excluded.last_name,
-      phone = excluded.phone, updated = excluded.updated, synced_at = datetime('now')
-  `)
-  db.prepare('DELETE FROM klaviyo_profile_lists').run()
-  const insertMembership = db.prepare(`INSERT OR IGNORE INTO klaviyo_profile_lists (profile_id, list_id, list_name) VALUES (?, ?, ?)`)
+  const upsertProfileSql = `INSERT INTO klaviyo_profiles (klaviyo_id, email, first_name, last_name, phone, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(klaviyo_id) DO UPDATE SET email = excluded.email, first_name = excluded.first_name, last_name = excluded.last_name, phone = excluded.phone, updated = excluded.updated, synced_at = datetime('now')`
+  const insertMembershipSql = `INSERT OR IGNORE INTO klaviyo_profile_lists (profile_id, list_id, list_name) VALUES (?, ?, ?)`
+  await db.execute({ sql: 'DELETE FROM klaviyo_profile_lists', args: [] })
   for (const list of lists) {
     let url = `/lists/${list.id}/profiles/?fields%5Bprofile%5D=email,first_name,last_name,phone_number,created,updated&page%5Bsize%5D=100`
     while (url) {
@@ -508,12 +467,10 @@ export async function syncKlaviyoData(db: Database.Database): Promise<KlaviyoSyn
         }>
         links: { next?: string | null }
       }
-      db.transaction(() => {
-        for (const p of d.data) {
-          upsertProfile.run(p.id, p.attributes.email ?? null, p.attributes.first_name ?? null, p.attributes.last_name ?? null, p.attributes.phone_number ?? null, p.attributes.created ?? null, p.attributes.updated ?? null)
-          insertMembership.run(p.id, list.id, list.name)
-        }
-      })()
+      for (const p of d.data) {
+        await db.execute({ sql: upsertProfileSql, args: [p.id, p.attributes.email ?? null, p.attributes.first_name ?? null, p.attributes.last_name ?? null, p.attributes.phone_number ?? null, p.attributes.created ?? null, p.attributes.updated ?? null] })
+        await db.execute({ sql: insertMembershipSql, args: [p.id, list.id, list.name] })
+      }
       const next = d.links?.next
       if (!next) break
       url = next.replace('https://a.klaviyo.com/api', '')
@@ -522,12 +479,12 @@ export async function syncKlaviyoData(db: Database.Database): Promise<KlaviyoSyn
 
   // ── Metrics (30d aggregates) ──
   let metricsCount = 0
-  const upsertMetric = db.prepare(`
+  const upsertMetricSql = `
     INSERT INTO klaviyo_metrics (metric_name, klaviyo_metric_id, value_30d)
     VALUES (?, ?, ?)
     ON CONFLICT(metric_name) DO UPDATE SET
       klaviyo_metric_id = excluded.klaviyo_metric_id, value_30d = excluded.value_30d, updated_at = datetime('now')
-  `)
+  `
 
   const metricTargets = [
     { name: 'Received Email',      search: 'Received Email',      measurement: 'count'  as const },
@@ -544,14 +501,14 @@ export async function syncKlaviyoData(db: Database.Database): Promise<KlaviyoSyn
       const metricId = await fetchMetricId(api_key, target.search)
       if (metricId) {
         const value = await fetchMetricAggregate30d(api_key, metricId, target.measurement)
-        upsertMetric.run(target.name, metricId, value)
+        await db.execute({sql: upsertMetricSql, args: [target.name, metricId, value]})
         metricsCount++
       }
     } catch { /* skip individual metric failures */ }
   }
 
   const now = new Date().toISOString()
-  db.prepare(`UPDATE klaviyo_config SET last_synced_at = ? WHERE id = 1`).run(now)
+  await db.execute({sql: `UPDATE klaviyo_config SET last_synced_at = ? WHERE id = 1`, args: [now]})
 
   return {
     lists_synced: lists.length,

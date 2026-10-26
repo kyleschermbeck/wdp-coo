@@ -29,42 +29,42 @@ async function extractText(buffer: Buffer, fileType: string, originalName: strin
 }
 
 export async function GET(req: NextRequest) {
-  const db = getDb()
+  const db = await getDb()
   const taskId = req.nextUrl.searchParams.get('task_id')
   const subtaskId = req.nextUrl.searchParams.get('subtask_id')
 
   let docs
   if (subtaskId) {
-    docs = db.prepare(`
+    docs = (await db.execute({sql: `
       SELECT d.*, s.title as subtask_title, t.title as task_title
       FROM documents d
       LEFT JOIN subtasks s ON s.id = d.subtask_id
       LEFT JOIN tasks t ON t.id = d.task_id
       WHERE d.subtask_id = ?
       ORDER BY d.created_at DESC
-    `).all(subtaskId)
+    `, args: [subtaskId]})).rows
   } else if (taskId) {
-    docs = db.prepare(`
+    docs = (await db.execute({sql: `
       SELECT d.*, t.title as task_title
       FROM documents d LEFT JOIN tasks t ON t.id = d.task_id
       WHERE d.task_id = ?
       ORDER BY d.created_at DESC
-    `).all(taskId)
+    `, args: [taskId]})).rows
   } else {
-    docs = db.prepare(`
+    docs = (await db.execute({sql: `
       SELECT d.*, t.title as task_title, s.title as subtask_title
       FROM documents d
       LEFT JOIN tasks t ON t.id = d.task_id
       LEFT JOIN subtasks s ON s.id = d.subtask_id
       ORDER BY d.created_at DESC
-    `).all()
+    `, args: []})).rows
   }
 
   return NextResponse.json(docs)
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb()
+  const db = await getDb()
 
   try {
     const formData = await req.formData()
@@ -92,26 +92,22 @@ export async function POST(req: NextRequest) {
       contentText = ''
     }
 
-    const result = db.prepare(`
+    const result = await db.execute({sql: `
       INSERT INTO documents (filename, original_name, file_type, file_size, content_text, task_id, subtask_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      filename, file.name, file.type || ext, file.size, contentText,
-      taskId ? Number(taskId) : null,
-      subtaskId ? Number(subtaskId) : null,
-    )
+    `, args: [filename, file.name, file.type || ext, file.size, contentText, taskId ? Number(taskId) : null, subtaskId ? Number(subtaskId) : null]})
 
     if (contentText) {
-      db.prepare(`INSERT INTO documents_fts(rowid, content_text) VALUES (?, ?)`).run(result.lastInsertRowid, contentText)
+      await db.execute({sql: `INSERT INTO documents_fts(rowid, content_text) VALUES (?, ?)`, args: [Number(result.lastInsertRowid), contentText]})
     }
 
-    const doc = db.prepare(`
+    const doc = (await db.execute({sql: `
       SELECT d.*, t.title as task_title, s.title as subtask_title
       FROM documents d
       LEFT JOIN tasks t ON t.id = d.task_id
       LEFT JOIN subtasks s ON s.id = d.subtask_id
       WHERE d.id = ?
-    `).get(result.lastInsertRowid)
+    `, args: [Number(result.lastInsertRowid)]})).rows[0]
 
     return NextResponse.json(doc, { status: 201 })
   } catch (err) {

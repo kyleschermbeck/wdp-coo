@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   const email = req.nextUrl.searchParams.get('email')
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
-  const db = getDb()
-  const config = getKlaviyoConfig(db)
+  const db = await getDb()
+  const config = await getKlaviyoConfig(db)
   if (!config) return NextResponse.json({ error: 'Klaviyo not configured' }, { status: 400 })
 
   const headers = kHeaders(config.api_key)

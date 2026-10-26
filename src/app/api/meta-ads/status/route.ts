@@ -33,14 +33,12 @@ async function refreshToken(token: string, appId: string | null, appSecret: stri
 }
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
   // Ensure last_validated_at column exists (idempotent — same pattern as instagram_config)
-  try { db.exec(`ALTER TABLE meta_ads_config ADD COLUMN last_validated_at TEXT`) } catch {}
+  try { await db.execute(`ALTER TABLE meta_ads_config ADD COLUMN last_validated_at TEXT`) } catch {}
 
-  const config = db.prepare(
-    'SELECT access_token, ad_account_id, account_name, connected_at, last_validated_at, app_id, app_secret FROM meta_ads_config WHERE id = 1'
-  ).get() as MetaConfig | undefined
+  const config = (await db.execute({sql: 'SELECT access_token, ad_account_id, account_name, connected_at, last_validated_at, app_id, app_secret FROM meta_ads_config WHERE id = 1', args: []})).rows[0] as unknown as MetaConfig | undefined
 
   if (!config) return NextResponse.json({ connected: false })
 
@@ -58,13 +56,11 @@ export async function GET() {
         const recovered = await refreshToken(config.access_token, config.app_id, config.app_secret)
         if (recovered) {
           const expiry = Date.now() + 60 * 24 * 3600_000 // ~60 days
-          db.prepare(
-            "UPDATE meta_ads_config SET access_token = ?, token_expiry = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1"
-          ).run(recovered, expiry)
+          await db.execute({sql: "UPDATE meta_ads_config SET access_token = ?, token_expiry = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1", args: [recovered, expiry]})
           return NextResponse.json({ connected: true, account_name: config.account_name, ad_account_id: config.ad_account_id })
         }
         // Could not refresh — mark as disconnected
-        db.prepare("UPDATE meta_ads_config SET last_validated_at = datetime('now') WHERE id = 1").run()
+        await db.execute({sql: "UPDATE meta_ads_config SET last_validated_at = datetime('now') WHERE id = 1", args: []})
         return NextResponse.json({ connected: false, reason: 'token_expired', account_name: config.account_name })
       }
 
@@ -76,14 +72,12 @@ export async function GET() {
         const newToken = await refreshToken(config.access_token, config.app_id, config.app_secret)
         if (newToken) {
           const expiry = Date.now() + 60 * 24 * 3600_000
-          db.prepare(
-            "UPDATE meta_ads_config SET access_token = ?, token_expiry = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1"
-          ).run(newToken, expiry)
+          await db.execute({sql: "UPDATE meta_ads_config SET access_token = ?, token_expiry = ?, connected_at = datetime('now'), last_validated_at = datetime('now') WHERE id = 1", args: [newToken, expiry]})
         } else {
-          db.prepare("UPDATE meta_ads_config SET last_validated_at = datetime('now') WHERE id = 1").run()
+          await db.execute({sql: "UPDATE meta_ads_config SET last_validated_at = datetime('now') WHERE id = 1", args: []})
         }
       } else {
-        db.prepare("UPDATE meta_ads_config SET last_validated_at = datetime('now') WHERE id = 1").run()
+        await db.execute({sql: "UPDATE meta_ads_config SET last_validated_at = datetime('now') WHERE id = 1", args: []})
       }
 
       return NextResponse.json({
@@ -106,7 +100,7 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  const db = getDb()
-  db.prepare('DELETE FROM meta_ads_config WHERE id = 1').run()
+  const db = await getDb()
+  await db.execute({sql: 'DELETE FROM meta_ads_config WHERE id = 1', args: []})
   return NextResponse.json({ ok: true })
 }

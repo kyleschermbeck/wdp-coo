@@ -4,15 +4,15 @@ import { trashEmail } from '@/lib/gmail'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
     const body = await req.json()
 
     if (body.category !== undefined) {
-      db.prepare('UPDATE email_cache SET category = ? WHERE id = ?').run(body.category, id)
+      await db.execute({sql: 'UPDATE email_cache SET category = ? WHERE id = ?', args: [body.category, id]})
     }
     if (body.is_read !== undefined) {
-      db.prepare('UPDATE email_cache SET is_read = ? WHERE id = ?').run(body.is_read, id)
+      await db.execute({sql: 'UPDATE email_cache SET is_read = ? WHERE id = ?', args: [body.is_read, id]})
     }
 
     return NextResponse.json({ ok: true })
@@ -23,13 +23,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const { id } = await params
-    const email = db.prepare('SELECT gmail_id FROM email_cache WHERE id = ?').get(id) as { gmail_id: string } | undefined
+    const email = (await db.execute({sql: 'SELECT gmail_id FROM email_cache WHERE id = ?', args: [id]})).rows[0] as unknown as { gmail_id: string } | undefined
     if (email) {
       try { await trashEmail(email.gmail_id) } catch {}
     }
-    db.prepare('DELETE FROM email_cache WHERE id = ?').run(id)
+    await db.execute({sql: 'DELETE FROM email_cache WHERE id = ?', args: [id]})
     return NextResponse.json({ ok: true })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

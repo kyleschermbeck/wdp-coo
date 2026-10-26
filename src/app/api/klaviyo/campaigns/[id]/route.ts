@@ -55,11 +55,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
-  const config = getKlaviyoConfig(db)
+  const db = await getDb()
+  const config = await getKlaviyoConfig(db)
   if (!config) return NextResponse.json({ error: 'Klaviyo not configured' }, { status: 400 })
 
-  const metricRows = db.prepare(`SELECT metric_name, klaviyo_metric_id FROM klaviyo_metrics WHERE klaviyo_metric_id IS NOT NULL`).all() as { metric_name: string; klaviyo_metric_id: string }[]
+  const metricRows = (await db.execute({sql: `SELECT metric_name, klaviyo_metric_id FROM klaviyo_metrics WHERE klaviyo_metric_id IS NOT NULL`, args: []})).rows as unknown as { metric_name: string; klaviyo_metric_id: string }[]
   const metricIds: Record<string, string> = {}
   for (const r of metricRows) metricIds[r.metric_name] = r.klaviyo_metric_id
 

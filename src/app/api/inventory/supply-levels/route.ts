@@ -39,20 +39,18 @@ interface ProductStock {
 
 
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
-  const supplies = db.prepare(
-    `SELECT id, name, vendor, order_url, package_weight, package_extra_oz,
+  const supplies = (await db.execute({sql: `SELECT id, name, vendor, order_url, package_weight, package_extra_oz,
             oz_per_tbsp, package_cost, containers_on_hand, category, active, updated_at
      FROM supplies WHERE category = 'product' AND active = 1
-     ORDER BY name`
-  ).all() as SupplyRow[]
+     ORDER BY name`, args: []})).rows as unknown as SupplyRow[]
 
   // Aggregate jars needed per product from unfulfilled orders
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT line_items FROM shopify_orders
     WHERE fulfillment_status IS NULL OR fulfillment_status IN ('unfulfilled', 'partial')
-  `).all() as OrderRow[]
+  `, args: []})).rows as unknown as OrderRow[]
 
   const jarsNeeded: Record<string, number> = {}
   for (const order of orders) {
@@ -67,9 +65,7 @@ export async function GET() {
   }
 
   // Get current inventory quantities to compute jars still to pack
-  const products = db.prepare(
-    `SELECT shopify_id, inventory_quantity FROM shopify_products WHERE status != 'archived'`
-  ).all() as ProductStock[]
+  const products = (await db.execute({sql: `SELECT shopify_id, inventory_quantity FROM shopify_products WHERE status != 'archived'`, args: []})).rows as unknown as ProductStock[]
 
   const stockMap: Record<string, number> = {}
   for (const p of products) stockMap[p.shopify_id] = p.inventory_quantity
@@ -83,7 +79,7 @@ export async function GET() {
   }
 
   // Labeled jars beyond order need are backstock — they'll still be filled, so count their supplies
-  const labeledJarsRows = db.prepare(`SELECT shopify_product_id, qty FROM labeled_jars`).all() as { shopify_product_id: string; qty: number }[]
+  const labeledJarsRows = (await db.execute({sql: `SELECT shopify_product_id, qty FROM labeled_jars`, args: []})).rows as unknown as { shopify_product_id: string; qty: number }[]
   for (const r of labeledJarsRows) {
     if (r.qty > (jarsToPack[r.shopify_product_id] ?? 0)) {
       jarsToPack[r.shopify_product_id] = r.qty
@@ -91,10 +87,8 @@ export async function GET() {
   }
 
   // All ingredients for all products
-  const ingredients = db.prepare(
-    `SELECT pi.supply_id, pi.shopify_product_id, pi.tbsp
-     FROM product_ingredients pi`
-  ).all() as IngredientRow[]
+  const ingredients = (await db.execute({sql: `SELECT pi.supply_id, pi.shopify_product_id, pi.tbsp
+     FROM product_ingredients pi`, args: []})).rows as unknown as IngredientRow[]
 
   // Compute tbsp still needed per supply (based on jars still to pack)
   const tbspNeeded: Record<number, number> = {}

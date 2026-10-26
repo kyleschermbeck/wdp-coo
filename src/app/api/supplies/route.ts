@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 
 export async function GET() {
-  const db = getDb()
-  const rows = db.prepare('SELECT * FROM supplies ORDER BY category, name').all()
+  const db = await getDb()
+  const rows = (await db.execute({sql: 'SELECT * FROM supplies ORDER BY category, name', args: []})).rows
   return NextResponse.json(rows)
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb()
+  const db = await getDb()
   const body = await req.json()
   const { name, vendor, order_url, package_weight, package_extra_oz, serving_size, serving_unit, total_servings, package_cost, category, active } = body
 
@@ -34,21 +34,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const result = db.prepare(`
+  const result = await db.execute({sql: `
     INSERT INTO supplies (name, vendor, order_url, package_weight, weight_unit, package_extra_oz, serving_size, serving_unit, total_servings, package_cost, oz_per_tbsp, category, active)
     VALUES (?, ?, ?, ?, 'lb', ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    name.trim(), vendor || null, order_url || null,
-    pkgLbs,
-    pkgExtraOz,
-    servSize,
-    servUnit,
-    totalServings,
-    pkgCost,
-    ozPerTbsp,
-    category || 'product',
-    active === false ? 0 : 1
-  )
-  const row = db.prepare('SELECT * FROM supplies WHERE id = ?').get(result.lastInsertRowid)
+  `, args: [name.trim(), vendor || null, order_url || null, pkgLbs, pkgExtraOz, servSize, servUnit, totalServings, pkgCost, ozPerTbsp, category || 'product', active === false ? 0 : 1]})
+  const row = (await db.execute({sql: 'SELECT * FROM supplies WHERE id = ?', args: [Number(result.lastInsertRowid)]})).rows[0]
   return NextResponse.json(row, { status: 201 })
 }

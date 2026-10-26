@@ -4,14 +4,14 @@ import { getDb } from '@/lib/db'
 // Returns the blended gross margin % across all Shopify products that have cost data.
 // Falls back to 55% if no costed products exist.
 export async function GET() {
-  const db = getDb()
+  const db = await getDb()
 
   // Get all Shopify products with their prices
-  const products = db.prepare(`
+  const products = (await db.execute({sql: `
     SELECT sp.shopify_id, sp.raw
     FROM shopify_products sp
     WHERE sp.status != 'archived'
-  `).all() as Array<{ shopify_id: string; raw: string }>
+  `, args: []})).rows as unknown as Array<{ shopify_id: string; raw: string }>
 
   const margins: number[] = []
 
@@ -24,12 +24,12 @@ export async function GET() {
     if (!price) continue
 
     // Ingredient cost
-    const ingredients = db.prepare(`
+    const ingredients = (await db.execute({sql: `
       SELECT pi.tbsp, s.oz_per_tbsp, s.package_cost, s.package_weight
       FROM product_ingredients pi
       JOIN supplies s ON s.id = pi.supply_id
       WHERE pi.shopify_product_id = ?
-    `).all(product.shopify_id) as Array<{ tbsp: number; oz_per_tbsp: number | null; package_cost: number | null; package_weight: number | null }>
+    `, args: [product.shopify_id]})).rows as unknown as Array<{ tbsp: number; oz_per_tbsp: number | null; package_cost: number | null; package_weight: number | null }>
 
     if (ingredients.length === 0) continue // no cost data — skip
 
@@ -43,12 +43,12 @@ export async function GET() {
     }
 
     // Packaging cost
-    const packaging = db.prepare(`
+    const packaging = (await db.execute({sql: `
       SELECT s.package_cost, s.total_servings
       FROM product_packaging pp
       JOIN supplies s ON s.id = pp.supply_id
       WHERE pp.shopify_product_id = ?
-    `).all(product.shopify_id) as Array<{ package_cost: number | null; total_servings: number | null }>
+    `, args: [product.shopify_id]})).rows as unknown as Array<{ package_cost: number | null; total_servings: number | null }>
     // Divide by total_servings to get per-unit cost (package_cost is case/bulk price)
     const packagingCost = packaging.reduce((sum, p) => {
       if (!p.package_cost) return sum
@@ -59,8 +59,8 @@ export async function GET() {
     }, 0)
 
     // Labor cost
-    const local = db.prepare('SELECT labor_cost FROM product_local WHERE shopify_product_id = ?').get(product.shopify_id) as
-      { labor_cost: number } | undefined
+    const local = (await db.execute({sql: 'SELECT labor_cost FROM product_local WHERE shopify_product_id = ?', args: [product.shopify_id]})).rows[0] as
+      unknown as { labor_cost: number } | undefined
     const laborCost = local?.labor_cost ?? 0
 
     const totalCost = ingredientCost + packagingCost + laborCost

@@ -32,10 +32,8 @@ export async function GET(request: Request) {
   }
 
   // Load stored credentials
-  const db = getDb()
-  const config = db.prepare(
-    'SELECT client_id, client_secret, property_id FROM google_analytics_config WHERE id = 1'
-  ).get() as GAConfig | undefined
+  const db = await getDb()
+  const config = (await db.execute({sql: 'SELECT client_id, client_secret, property_id FROM google_analytics_config WHERE id = 1', args: []})).rows[0] as unknown as GAConfig | undefined
 
   if (!config) {
     return NextResponse.redirect('http://localhost:3000/marketing?ga_error=no_config')
@@ -64,11 +62,9 @@ export async function GET(request: Request) {
 
   const expiry = tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : null
 
-  db.prepare(
-    `UPDATE google_analytics_config
+  await db.execute({sql: `UPDATE google_analytics_config
      SET access_token = ?, refresh_token = COALESCE(?, refresh_token), token_expiry = ?
-     WHERE id = 1`
-  ).run(tokens.access_token, tokens.refresh_token ?? null, expiry)
+     WHERE id = 1`, args: [tokens.access_token, tokens.refresh_token ?? null, expiry]})
 
   // Try to fetch the property name for display
   if (config.property_id) {
@@ -80,7 +76,7 @@ export async function GET(request: Request) {
       if (adminRes.ok) {
         const prop = await adminRes.json() as { displayName?: string }
         if (prop.displayName) {
-          db.prepare('UPDATE google_analytics_config SET property_name = ? WHERE id = 1').run(prop.displayName)
+          await db.execute({sql: 'UPDATE google_analytics_config SET property_name = ? WHERE id = 1', args: [prop.displayName]})
         }
       }
     } catch { /* non-fatal */ }

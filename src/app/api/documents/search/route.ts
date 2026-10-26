@@ -5,9 +5,9 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim()
   if (!q || q.length < 2) return NextResponse.json([])
 
-  const db = getDb()
+  const db = await getDb()
 
-  const results = db.prepare(`
+  const results = (await db.execute({sql: `
     SELECT d.id, d.original_name, d.file_type, d.task_id, t.title as task_title,
            snippet(documents_fts, 0, '<mark>', '</mark>', '…', 32) as excerpt
     FROM documents_fts
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     WHERE documents_fts MATCH ?
     ORDER BY rank
     LIMIT 5
-  `).all(q) as {
+  `, args: [q]})).rows as unknown as {
     id: number; original_name: string; file_type: string
     task_id: number | null; task_title: string | null; excerpt: string
   }[]

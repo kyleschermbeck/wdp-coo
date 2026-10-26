@@ -19,8 +19,8 @@ export async function POST(request: Request) {
   const normalized = store_url.replace(/^https?:\/\//, '').replace(/\/$/, '')
   const state = crypto.randomBytes(16).toString('hex')
 
-  const db = getDb()
-  db.prepare(`
+  const db = await getDb()
+  await db.execute({sql: `
     INSERT INTO shopify_config (id, store_url, access_token, client_id, client_secret, oauth_state)
     VALUES (1, ?, '', ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       client_id = excluded.client_id,
       client_secret = excluded.client_secret,
       oauth_state = excluded.oauth_state
-  `).run(normalized, client_id, client_secret, state)
+  `, args: [normalized, client_id, client_secret, state]})
 
   const authUrl = new URL(`https://${normalized}/admin/oauth/authorize`)
   authUrl.searchParams.set('client_id', client_id)

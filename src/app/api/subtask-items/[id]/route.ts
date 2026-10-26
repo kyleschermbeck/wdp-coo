@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const db = getDb()
+  const db = await getDb()
   const { id } = await params
   const body = await req.json()
 
-  const item = db.prepare('SELECT * FROM subtask_items WHERE id = ?').get(Number(id))
+  const item = ((await db.execute({sql: 'SELECT * FROM subtask_items WHERE id = ?', args: [Number(id)]})).rows[0])
   if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const fields: string[] = []
@@ -19,15 +19,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (fields.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
 
   values.push(Number(id))
-  db.prepare(`UPDATE subtask_items SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  await db.execute({sql: `UPDATE subtask_items SET ${fields.join(', ')} WHERE id = ?`, args: values as (string | number | boolean | null | bigint)[]})
 
-  const updated = db.prepare('SELECT * FROM subtask_items WHERE id = ?').get(Number(id))
+  const updated = ((await db.execute({sql: 'SELECT * FROM subtask_items WHERE id = ?', args: [Number(id)]})).rows[0])
   return NextResponse.json(updated)
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const db = getDb()
+  const db = await getDb()
   const { id } = await params
-  db.prepare('DELETE FROM subtask_items WHERE id = ?').run(Number(id))
+  await db.execute({sql: 'DELETE FROM subtask_items WHERE id = ?', args: [Number(id)]})
   return NextResponse.json({ ok: true })
 }

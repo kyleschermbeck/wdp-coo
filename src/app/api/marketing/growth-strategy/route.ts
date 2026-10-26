@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getDb } from '@/lib/db'
+import type { Client } from '@libsql/client'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -14,44 +15,42 @@ function getApiKey(): string | undefined {
 }
 
 // ─── Shopify data ─────────────────────────────────────────────────────────────
-function getShopifyData(db: ReturnType<typeof import('@/lib/db').getDb>) {
-  const rev30 = db.prepare(`
+async function getShopifyData(db: Client) {
+  const rev30 = (await db.execute({sql: `
     SELECT COUNT(*) as orders, ROUND(SUM(total_price),2) as revenue, ROUND(AVG(total_price),2) as aov
     FROM shopify_orders WHERE financial_status='paid' AND created_at >= datetime('now','-30 days')
-  `).get() as { orders: number; revenue: number; aov: number }
+  `, args: []})).rows[0] as unknown as { orders: number; revenue: number; aov: number }
 
-  const rev90 = db.prepare(`
+  const rev90 = (await db.execute({sql: `
     SELECT COUNT(*) as orders, ROUND(SUM(total_price),2) as revenue
     FROM shopify_orders WHERE financial_status='paid' AND created_at >= datetime('now','-90 days')
-  `).get() as { orders: number; revenue: number }
+  `, args: []})).rows[0] as unknown as { orders: number; revenue: number }
 
-  const revByMonth = db.prepare(`
+  const revByMonth = (await db.execute({sql: `
     SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as orders, ROUND(SUM(total_price),2) as revenue
     FROM shopify_orders WHERE financial_status='paid'
     GROUP BY month ORDER BY month DESC LIMIT 4
-  `).all() as { month: string; orders: number; revenue: number }[]
+  `, args: []})).rows as unknown as { month: string; orders: number; revenue: number }[]
 
-  const topProducts = db.prepare(`
+  const topProducts = (await db.execute({sql: `
     SELECT title, inventory_quantity FROM shopify_products
     WHERE status='active' AND is_bundle=0
     ORDER BY inventory_quantity ASC LIMIT 8
-  `).all() as { title: string; inventory_quantity: number }[]
+  `, args: []})).rows as unknown as { title: string; inventory_quantity: number }[]
 
-  const discounts = db.prepare(`
+  const discounts = (await db.execute({sql: `
     SELECT discount_codes, COUNT(*) as cnt, ROUND(SUM(total_price),2) as rev
     FROM shopify_orders WHERE financial_status='paid' AND discount_codes IS NOT NULL AND discount_codes != '[]'
     AND created_at >= datetime('now','-30 days')
     GROUP BY discount_codes LIMIT 5
-  `).all() as { discount_codes: string; cnt: number; rev: number }[]
+  `, args: []})).rows as unknown as { discount_codes: string; cnt: number; rev: number }[]
 
   return { rev30, rev90, revByMonth, topProducts, discounts }
 }
 
 // ─── Meta Ads (live) ──────────────────────────────────────────────────────────
-async function getMetaAdsData(db: ReturnType<typeof import('@/lib/db').getDb>) {
-  const config = db.prepare(
-    'SELECT access_token, ad_account_id, account_name FROM meta_ads_config WHERE id = 1'
-  ).get() as { access_token: string; ad_account_id: string; account_name: string | null } | undefined
+async function getMetaAdsData(db: Client) {
+  const config = (await db.execute({sql: 'SELECT access_token, ad_account_id, account_name FROM meta_ads_config WHERE id = 1', args: []})).rows[0] as unknown as { access_token: string; ad_account_id: string; account_name: string | null } | undefined
 
   if (!config) return null
 
@@ -104,9 +103,9 @@ async function getMetaAdsData(db: ReturnType<typeof import('@/lib/db').getDb>) {
 }
 
 // ─── Google Analytics (live) ──────────────────────────────────────────────────
-async function getGAData(db: ReturnType<typeof import('@/lib/db').getDb>) {
-  const gaConfig = db.prepare('SELECT property_id, access_token, token_expiry FROM google_analytics_config WHERE id = 1').get() as
-    | { property_id: string; access_token: string; token_expiry: number | null } | undefined
+async function getGAData(db: Client) {
+  const gaConfig = (await db.execute({sql: 'SELECT property_id, access_token, token_expiry FROM google_analytics_config WHERE id = 1', args: []})).rows[0] as
+    unknown as | { property_id: string; access_token: string; token_expiry: number | null } | undefined
 
   if (!gaConfig?.access_token) return null
 
@@ -161,14 +160,14 @@ async function getGAData(db: ReturnType<typeof import('@/lib/db').getDb>) {
 }
 
 // ─── Klaviyo data ─────────────────────────────────────────────────────────────
-function getKlaviyoData(db: ReturnType<typeof import('@/lib/db').getDb>) {
-  const subscribers = db.prepare('SELECT SUM(profile_count) as total FROM klaviyo_lists').get() as { total: number }
-  const metrics = db.prepare('SELECT metric_name, value_30d FROM klaviyo_metrics').all() as { metric_name: string; value_30d: number }[]
-  const campaigns = db.prepare(`
+async function getKlaviyoData(db: Client) {
+  const subscribers = (await db.execute({sql: 'SELECT SUM(profile_count) as total FROM klaviyo_lists', args: []})).rows[0] as unknown as { total: number }
+  const metrics = (await db.execute({sql: 'SELECT metric_name, value_30d FROM klaviyo_metrics', args: []})).rows as unknown as { metric_name: string; value_30d: number }[]
+  const campaigns = (await db.execute({sql: `
     SELECT name, status, send_time, recipients, open_rate, click_rate, revenue
     FROM klaviyo_campaigns WHERE status='Sent' ORDER BY send_time DESC LIMIT 5
-  `).all() as { name: string; status: string; send_time: string | null; recipients: number; open_rate: number; click_rate: number; revenue: number }[]
-  const flows = db.prepare(`SELECT name, status, trigger_type FROM klaviyo_flows WHERE status='live'`).all() as { name: string; status: string; trigger_type: string | null }[]
+  `, args: []})).rows as unknown as { name: string; status: string; send_time: string | null; recipients: number; open_rate: number; click_rate: number; revenue: number }[]
+  const flows = (await db.execute({sql: `SELECT name, status, trigger_type FROM klaviyo_flows WHERE status='live'`, args: []})).rows as unknown as { name: string; status: string; trigger_type: string | null }[]
 
   const metricMap: Record<string, number> = {}
   for (const m of metrics) metricMap[m.metric_name] = m.value_30d
@@ -189,23 +188,23 @@ function getKlaviyoData(db: ReturnType<typeof import('@/lib/db').getDb>) {
 }
 
 // ─── Instagram data ───────────────────────────────────────────────────────────
-function getInstagramData(db: ReturnType<typeof import('@/lib/db').getDb>) {
-  const config = db.prepare('SELECT username FROM instagram_config WHERE id = 1').get() as { username: string | null } | undefined
+async function getInstagramData(db: Client) {
+  const config = (await db.execute({sql: 'SELECT username FROM instagram_config WHERE id = 1', args: []})).rows[0] as unknown as { username: string | null } | undefined
   return config?.username ?? null
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function GET() {
-  const db = getDb()
-  const row = db.prepare(`SELECT value, updated_at FROM settings_kv WHERE key = 'growth_strategy'`).get() as
-    | { value: string; updated_at: string } | undefined
+  const db = await getDb()
+  const row = (await db.execute({sql: `SELECT value, updated_at FROM settings_kv WHERE key = 'growth_strategy'`, args: []})).rows[0] as
+    unknown as | { value: string; updated_at: string } | undefined
   if (!row) return NextResponse.json({ strategy: null })
   return NextResponse.json({ strategy: row.value, generated_at: row.updated_at })
 }
 
 export async function POST() {
-  const db = getDb()
+  const db = await getDb()
   const apiKey = getApiKey()
   if (!apiKey) return NextResponse.json({ error: 'No API key configured' }, { status: 400 })
 
@@ -215,8 +214,8 @@ export async function POST() {
     getMetaAdsData(db),
     getGAData(db),
   ])
-  const klaviyo = getKlaviyoData(db)
-  const igUsername = getInstagramData(db)
+  const klaviyo = await getKlaviyoData(db)
+  const igUsername = await getInstagramData(db)
 
   // ── Build context string ──────────────────────────────────────────────────
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -328,14 +327,13 @@ Tone: direct, confident, data-driven. No fluff. Be specific to WDP's situation, 
   const strategy = textBlock?.type === 'text' ? textBlock.text : ''
 
   // ── Cache ─────────────────────────────────────────────────────────────────
-  db.prepare(`
+  await db.execute({sql: `
     INSERT INTO settings_kv (key, value, updated_at) VALUES ('growth_strategy', ?, datetime('now'))
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(strategy)
+  `, args: [strategy]})
 
   try {
-    db.prepare('INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)')
-      .run('growth_strategy', 'claude-opus-5', response.usage.input_tokens, response.usage.output_tokens)
+    await db.execute({sql: 'INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)', args: ['growth_strategy', 'claude-opus-5', response.usage.input_tokens, response.usage.output_tokens]})
   } catch { /* ignore */ }
 
   return NextResponse.json({ strategy, generated_at: new Date().toISOString() })

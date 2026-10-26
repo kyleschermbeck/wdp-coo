@@ -3,8 +3,8 @@ import { getDb } from '@/lib/db'
 import { getShopifyConfig, updateInventoryLevel, fetchLocations } from '@/lib/shopify'
 
 export async function POST(req: NextRequest) {
-  const db = getDb()
-  const config = getShopifyConfig(db)
+  const db = await getDb()
+  const config = await getShopifyConfig(db)
   if (!config?.access_token) return NextResponse.json({ error: 'Shopify not connected' }, { status: 400 })
 
   const { inventory_item_id, available } = await req.json() as { inventory_item_id: string; available: number }
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    let locationId = (db.prepare(`SELECT shopify_id FROM shopify_locations WHERE active = 1 LIMIT 1`).get() as { shopify_id: string } | undefined)?.shopify_id
+    let locationId = ((await db.execute({sql: `SELECT shopify_id FROM shopify_locations WHERE active = 1 LIMIT 1`, args: []})).rows[0] as unknown as { shopify_id: string } | undefined)?.shopify_id
     if (!locationId) {
       const locations = await fetchLocations(config)
       const active = locations.find(l => l.active)
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     await updateInventoryLevel(config, inventory_item_id, locationId, available)
     // Update local cache
-    db.prepare(`UPDATE shopify_products SET inventory_quantity = ? WHERE inventory_item_id = ?`).run(available, inventory_item_id)
+    await db.execute({sql: `UPDATE shopify_products SET inventory_quantity = ? WHERE inventory_item_id = ?`, args: [available, inventory_item_id]})
     return NextResponse.json({ ok: true })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

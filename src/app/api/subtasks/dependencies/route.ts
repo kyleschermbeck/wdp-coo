@@ -6,8 +6,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const subtask_id = searchParams.get('subtask_id')
   if (!subtask_id) return NextResponse.json({ error: 'subtask_id required' }, { status: 400 })
-  const db = getDb()
-  const rows = db.prepare(`
+  const db = await getDb()
+  const rows = (await db.execute({sql: `
     SELECT
       sd.id,
       sd.depends_on_task_id,
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     LEFT JOIN tasks t ON t.id = sd.depends_on_task_id
     LEFT JOIN subtasks s ON s.id = sd.depends_on_subtask_id
     WHERE sd.subtask_id = ?
-  `).all(Number(subtask_id))
+  `, args: [Number(subtask_id)]})).rows
   return NextResponse.json(rows)
 }
 
@@ -36,12 +36,12 @@ export async function POST(req: Request) {
   if (depends_on_subtask_id && depends_on_subtask_id === subtask_id) {
     return NextResponse.json({ error: 'A subtask cannot depend on itself' }, { status: 400 })
   }
-  const db = getDb()
-  db.prepare(`
+  const db = await getDb()
+  await db.execute({sql: `
     INSERT OR IGNORE INTO subtask_dependencies (subtask_id, depends_on_task_id, depends_on_subtask_id)
     VALUES (?, ?, ?)
-  `).run(subtask_id, depends_on_task_id ?? null, depends_on_subtask_id ?? null)
-  const row = db.prepare(`
+  `, args: [subtask_id, depends_on_task_id ?? null, depends_on_subtask_id ?? null]})
+  const row = (await db.execute({sql: `
     SELECT
       sd.id,
       sd.depends_on_task_id,
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     LEFT JOIN tasks t ON t.id = sd.depends_on_task_id
     LEFT JOIN subtasks s ON s.id = sd.depends_on_subtask_id
     WHERE sd.subtask_id = ? AND sd.depends_on_task_id IS ? AND sd.depends_on_subtask_id IS ?
-  `).get(subtask_id, depends_on_task_id ?? null, depends_on_subtask_id ?? null)
+  `, args: [subtask_id, depends_on_task_id ?? null, depends_on_subtask_id ?? null]})).rows[0]
   return NextResponse.json(row)
 }
 
@@ -63,7 +63,7 @@ export async function DELETE(req: Request) {
   const subtask_id = searchParams.get('subtask_id')
   const dep_id = searchParams.get('dep_id')
   if (!subtask_id || !dep_id) return NextResponse.json({ error: 'subtask_id and dep_id required' }, { status: 400 })
-  const db = getDb()
-  db.prepare('DELETE FROM subtask_dependencies WHERE subtask_id = ? AND id = ?').run(Number(subtask_id), Number(dep_id))
+  const db = await getDb()
+  await db.execute({sql: 'DELETE FROM subtask_dependencies WHERE subtask_id = ? AND id = ?', args: [Number(subtask_id), Number(dep_id)]})
   return NextResponse.json({ ok: true })
 }

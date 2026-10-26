@@ -35,8 +35,8 @@ export async function POST(request: Request) {
     } catch { /* fall through with original token */ }
   }
 
-  const db = getDb()
-  db.prepare(`
+  const db = await getDb()
+  await db.execute({sql: `
     INSERT INTO instagram_config (id, access_token, ig_user_id, username, connected_at)
     VALUES (1, ?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       ig_user_id = excluded.ig_user_id,
       username = excluded.username,
       connected_at = excluded.connected_at
-  `).run(finalToken, ig_user_id, account.username ?? null)
+  `, args: [finalToken, ig_user_id, account.username ?? null]})
 
   return NextResponse.json({ ok: true, username: account.username, long_lived: finalToken !== access_token })
 }

@@ -55,8 +55,8 @@ export interface CampaignActivity {
 }
 
 export async function GET() {
-  const db = getDb()
-  const config = getShopifyConfig(db)
+  const db = await getDb()
+  const config = await getShopifyConfig(db)
   if (!config) return NextResponse.json({ error: 'Shopify not connected' }, { status: 400 })
 
   const url = `https://${config.store_url}/admin/api/2024-01/graphql.json`

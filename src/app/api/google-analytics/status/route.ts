@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 
 export async function GET() {
-  const db = getDb()
-  const row = db.prepare(
-    'SELECT property_id, measurement_id, property_name, refresh_token FROM google_analytics_config WHERE id = 1'
-  ).get() as {
+  const db = await getDb()
+  const row = (await db.execute({sql: 'SELECT property_id, measurement_id, property_name, refresh_token FROM google_analytics_config WHERE id = 1', args: []})).rows[0] as unknown as {
     property_id: string | null
     measurement_id: string | null
     property_name: string | null

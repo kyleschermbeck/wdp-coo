@@ -8,7 +8,7 @@ interface ItemBody {
 }
 
 export async function PATCH(req: NextRequest) {
-  const db = getDb()
+  const db = await getDb()
   const { order_id, items }: { order_id: number; items: ItemBody[] } = await req.json()
 
   if (!order_id || !Array.isArray(items)) {
@@ -16,9 +16,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   for (const item of items) {
-    const existing = db.prepare(
-      `SELECT id, supply_id, shopify_product_id, qty, delivered FROM supply_order_items WHERE id = ?`
-    ).get(item.id) as { id: number; supply_id: number | null; shopify_product_id: string | null; qty: number; delivered: number } | undefined
+    const existing = (await db.execute({sql: `SELECT id, supply_id, shopify_product_id, qty, delivered FROM supply_order_items WHERE id = ?`, args: [item.id]})).rows[0] as unknown as { id: number; supply_id: number | null; shopify_product_id: string | null; qty: number; delivered: number } | undefined
 
     if (!existing) continue
 
@@ -26,64 +24,56 @@ export async function PATCH(req: NextRequest) {
     const nowDelivered = item.delivered
     const deliveredQty = item.delivered_qty ?? existing.qty
 
-    db.prepare(`
+    await db.execute({sql: `
       UPDATE supply_order_items
       SET delivered = ?, delivered_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END,
           delivered_qty = ?
       WHERE id = ?
-    `).run(nowDelivered ? 1 : 0, nowDelivered ? 1 : 0, deliveredQty, item.id)
+    `, args: [nowDelivered ? 1 : 0, nowDelivered ? 1 : 0, deliveredQty, item.id]})
 
     if (!wasDelivered && nowDelivered) {
       // Label item — update product_label_inventory
       if (existing.shopify_product_id) {
-        const labelSupply = db.prepare(
-          `SELECT id FROM supplies WHERE name = 'Jar Label - 100/roll' AND active = 1 LIMIT 1`
-        ).get() as { id: number } | undefined
+        const labelSupply = (await db.execute({sql: `SELECT id FROM supplies WHERE name = 'Jar Label - 100/roll' AND active = 1 LIMIT 1`, args: []})).rows[0] as unknown as { id: number } | undefined
 
         if (labelSupply) {
-          db.prepare(`
+          await db.execute({sql: `
             INSERT INTO product_label_inventory (shopify_product_id, supply_id, units_on_hand)
             VALUES (?, ?, ?)
             ON CONFLICT(shopify_product_id, supply_id) DO UPDATE
               SET units_on_hand = units_on_hand + excluded.units_on_hand
-          `).run(existing.shopify_product_id, labelSupply.id, deliveredQty)
+          `, args: [existing.shopify_product_id, labelSupply.id, deliveredQty]})
         }
       } else if (existing.supply_id) {
         // Regular supply item — update containers_on_hand
-        db.prepare(`UPDATE supplies SET containers_on_hand = containers_on_hand + ? WHERE id = ?`)
-          .run(deliveredQty, existing.supply_id)
+        await db.execute({sql: `UPDATE supplies SET containers_on_hand = containers_on_hand + ? WHERE id = ?`, args: [deliveredQty, existing.supply_id]})
       }
     } else if (wasDelivered && !nowDelivered) {
       // Unchecking — reverse the addition
       if (existing.shopify_product_id) {
-        const labelSupply = db.prepare(
-          `SELECT id FROM supplies WHERE name = 'Jar Label - 100/roll' AND active = 1 LIMIT 1`
-        ).get() as { id: number } | undefined
+        const labelSupply = (await db.execute({sql: `SELECT id FROM supplies WHERE name = 'Jar Label - 100/roll' AND active = 1 LIMIT 1`, args: []})).rows[0] as unknown as { id: number } | undefined
 
         if (labelSupply) {
-          db.prepare(`
+          await db.execute({sql: `
             UPDATE product_label_inventory
             SET units_on_hand = MAX(0, units_on_hand - ?)
             WHERE shopify_product_id = ? AND supply_id = ?
-          `).run(deliveredQty, existing.shopify_product_id, labelSupply.id)
+          `, args: [deliveredQty, existing.shopify_product_id, labelSupply.id]})
         }
       } else if (existing.supply_id) {
-        db.prepare(`UPDATE supplies SET containers_on_hand = MAX(0, containers_on_hand - ?) WHERE id = ?`)
-          .run(deliveredQty, existing.supply_id)
+        await db.execute({sql: `UPDATE supplies SET containers_on_hand = MAX(0, containers_on_hand - ?) WHERE id = ?`, args: [deliveredQty, existing.supply_id]})
       }
     }
   }
 
   // Recompute order status
-  const allItems = db.prepare(
-    `SELECT delivered FROM supply_order_items WHERE supply_order_id = ?`
-  ).all(order_id) as { delivered: number }[]
+  const allItems = (await db.execute({sql: `SELECT delivered FROM supply_order_items WHERE supply_order_id = ?`, args: [order_id]})).rows as unknown as { delivered: number }[]
 
   const totalItems = allItems.length
   const deliveredCount = allItems.filter(i => i.delivered === 1).length
   const status = deliveredCount === 0 ? 'pending' : deliveredCount === totalItems ? 'delivered' : 'partial'
 
-  db.prepare(`UPDATE supply_orders SET status = ? WHERE id = ?`).run(status, order_id)
+  await db.execute({sql: `UPDATE supply_orders SET status = ? WHERE id = ?`, args: [status, order_id]})
 
   return NextResponse.json({ ok: true, status })
 }

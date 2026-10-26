@@ -6,14 +6,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
+  const db = await getDb()
   const { title, description, category, target_value, current_value, unit, due_date, status } = await request.json()
-  db.prepare(`
+  await db.execute({sql: `
     UPDATE marketing_goals
     SET title = ?, description = ?, category = ?, target_value = ?, current_value = ?, unit = ?, due_date = ?, status = ?
     WHERE id = ?
-  `).run(
-    title,
+  `, args: [title,
     description ?? null,
     category ?? 'growth',
     target_value ?? null,
@@ -21,9 +20,8 @@ export async function PUT(
     unit ?? '',
     due_date ?? null,
     status ?? 'active',
-    id
-  )
-  const goal = db.prepare('SELECT * FROM marketing_goals WHERE id = ?').get(id)
+    id]})
+  const goal = (await db.execute({sql: 'SELECT * FROM marketing_goals WHERE id = ?', args: [id]})).rows[0]
   return NextResponse.json(goal)
 }
 
@@ -32,7 +30,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
-  db.prepare('DELETE FROM marketing_goals WHERE id = ?').run(id)
+  const db = await getDb()
+  await db.execute({sql: 'DELETE FROM marketing_goals WHERE id = ?', args: [id]})
   return NextResponse.json({ ok: true })
 }

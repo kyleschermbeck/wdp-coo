@@ -13,19 +13,19 @@ function getApiKey(): string | undefined {
   } catch { return undefined }
 }
 
-function getStrategySection(section: string): string {
-  const db = getDb()
-  const row = db.prepare('SELECT content FROM marketing_strategy WHERE section = ?').get(section) as { content: string } | undefined
+async function getStrategySection(section: string): Promise<string> {
+  const db = await getDb()
+  const row = (await db.execute({sql: 'SELECT content FROM marketing_strategy WHERE section = ?', args: [section]})).rows[0] as unknown as { content: string } | undefined
   return row?.content ?? ''
 }
 
-function saveStrategySection(section: string, content: string) {
-  const db = getDb()
-  db.prepare(`
+async function saveStrategySection(section: string, content: string) {
+  const db = await getDb()
+  await db.execute({sql: `
     INSERT INTO marketing_strategy (section, content, updated_at)
     VALUES (?, ?, datetime('now'))
     ON CONFLICT(section) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at
-  `).run(section, content)
+  `, args: [section, content]})
 }
 
 const BASE = 'https://graph.facebook.com/v22.0'
@@ -41,11 +41,11 @@ async function igGet<T>(path: string, params: Record<string, string>, token: str
 }
 
 export async function GET() {
-  const competitors = getStrategySection('content_ideas_competitors')
-  const focusNotes  = getStrategySection('content_ideas_focus')
-  const ideasRaw    = getStrategySection('content_ideas_result')
-  const lastGenerated = getStrategySection('content_ideas_generated_at')
-  const ratingsRaw  = getStrategySection('content_ideas_ratings')
+  const competitors = await getStrategySection('content_ideas_competitors')
+  const focusNotes  = await getStrategySection('content_ideas_focus')
+  const ideasRaw    = await getStrategySection('content_ideas_result')
+  const lastGenerated = await getStrategySection('content_ideas_generated_at')
+  const ratingsRaw  = await getStrategySection('content_ideas_ratings')
 
   let ideas: unknown[] = []
   try { ideas = ideasRaw ? JSON.parse(ideasRaw) : [] } catch { /* empty */ }
@@ -75,9 +75,9 @@ export async function POST(request: Request) {
   if (!apiKey) return NextResponse.json({ error: 'Anthropic API key not configured' }, { status: 500 })
 
   // Pull Instagram data
-  const db = getDb()
-  const igConfig = db.prepare('SELECT access_token, ig_user_id, username FROM instagram_config WHERE id = 1').get() as
-    { access_token: string; ig_user_id: string; username: string | null } | undefined
+  const db = await getDb()
+  const igConfig = (await db.execute({sql: 'SELECT access_token, ig_user_id, username FROM instagram_config WHERE id = 1', args: []})).rows[0] as
+    unknown as { access_token: string; ig_user_id: string; username: string | null } | undefined
 
   let igContext = 'Instagram not connected — no engagement data available.'
   if (igConfig) {
@@ -131,10 +131,10 @@ export async function POST(request: Request) {
   }
 
   // Pull brand strategy
-  const brandVoice    = getStrategySection('brand_voice')
-  const targetAudience = getStrategySection('target_audience')
-  const positioning   = getStrategySection('brand_positioning')
-  const keyMessaging  = getStrategySection('key_messaging')
+  const brandVoice    = await getStrategySection('brand_voice')
+  const targetAudience = await getStrategySection('target_audience')
+  const positioning   = await getStrategySection('brand_positioning')
+  const keyMessaging  = await getStrategySection('key_messaging')
 
   const brandContext = [
     brandVoice    ? `Brand Voice: ${brandVoice}` : '',
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
   ].filter(Boolean).join('\n\n') || 'Weeknight Dinner Party (WDP) — artisanal spice blend brand. Warm, approachable tone. Audience: home cooks who want to elevate everyday meals without complexity.'
 
   // Build rated-idea feedback context
-  const ideasRaw = getStrategySection('content_ideas_result')
+  const ideasRaw = await getStrategySection('content_ideas_result')
   let previousIdeas: Array<{ id: string; title: string; format: string; why: string }> = []
   try { previousIdeas = ideasRaw ? JSON.parse(ideasRaw) : [] } catch { /* empty */ }
 
@@ -222,8 +222,7 @@ Generate 12 diverse, actionable Instagram content ideas using the generate_ideas
     // Log usage to api_usage table so it shows in Settings → Agents cost tracker
     try {
       const usage = message.usage
-      db.prepare('INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)')
-        .run('content-ideas', 'claude-sonnet-5', usage.input_tokens, usage.output_tokens)
+      await db.execute({sql: 'INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)', args: ['content-ideas', 'claude-sonnet-5', usage.input_tokens, usage.output_tokens]})
     } catch { /* non-fatal */ }
 
     return NextResponse.json({ ideas, last_generated: now })

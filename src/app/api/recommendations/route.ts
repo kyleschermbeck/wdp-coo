@@ -14,17 +14,17 @@ export interface Recommendation {
 // GET /api/recommendations — curated proactive action items from agent morning analysis
 export async function GET() {
   try {
-  const db = getDb()
+  const db = await getDb()
   const recs: Recommendation[] = []
   let priority = 0
 
   // 1. Overdue tasks — most specific: name the tasks
-  const overdueTasks = db.prepare(`
+  const overdueTasks = (await db.execute({sql: `
     SELECT t.id, t.title, t.due_date, t.priority, p.name as project
     FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
     WHERE t.status != 'done' AND t.due_date < date('now')
     ORDER BY t.due_date ASC LIMIT 3
-  `).all() as { id: number; title: string; due_date: string; priority: string; project: string }[]
+  `, args: []})).rows as unknown as { id: number; title: string; due_date: string; priority: string; project: string }[]
 
   for (const t of overdueTasks) {
     recs.push({
@@ -39,13 +39,13 @@ export async function GET() {
   }
 
   // 2. Urgent tasks due soon (not overdue)
-  const urgentSoon = db.prepare(`
+  const urgentSoon = (await db.execute({sql: `
     SELECT t.id, t.title, t.due_date, p.name as project
     FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
     WHERE t.status != 'done' AND t.priority = 'urgent'
       AND t.due_date >= date('now') AND t.due_date <= date('now', '+7 days')
     ORDER BY t.due_date ASC LIMIT 2
-  `).all() as { id: number; title: string; due_date: string; project: string }[]
+  `, args: []})).rows as unknown as { id: number; title: string; due_date: string; project: string }[]
 
   for (const t of urgentSoon) {
     recs.push({
@@ -60,7 +60,7 @@ export async function GET() {
   }
 
   // 3. Low-stock Shopify products (finished goods needing restock)
-  const lowStock = db.prepare(`
+  const lowStock = (await db.execute({sql: `
     SELECT sp.title as name, sp.inventory_quantity as qty,
            COALESCE(sis.reorder_threshold, 12) as threshold
     FROM shopify_products sp
@@ -69,7 +69,7 @@ export async function GET() {
       AND sp.inventory_quantity <= COALESCE(sis.reorder_threshold, 12)
     ORDER BY sp.inventory_quantity ASC
     LIMIT 2
-  `).all() as { name: string; qty: number; threshold: number }[]
+  `, args: []})).rows as unknown as { name: string; qty: number; threshold: number }[]
 
   for (const s of lowStock) {
     const shortName = s.name.length > 30 ? s.name.slice(0, 28) + '…' : s.name
@@ -85,11 +85,11 @@ export async function GET() {
   }
 
   // 4. Klaviyo: low click rate → suggest a re-engagement
-  const emailMetric = db.prepare(`
+  const emailMetric = (await db.execute({sql: `
     SELECT value_30d FROM klaviyo_metrics WHERE LOWER(metric_name) LIKE '%click%' LIMIT 1
-  `).get() as { value_30d: number } | undefined
+  `, args: []})).rows[0] as unknown as { value_30d: number } | undefined
 
-  const listSize = db.prepare(`SELECT SUM(profile_count) as total FROM klaviyo_lists WHERE LOWER(name) LIKE '%email%'`).get() as { total: number | null } | undefined
+  const listSize = (await db.execute({sql: `SELECT SUM(profile_count) as total FROM klaviyo_lists WHERE LOWER(name) LIKE '%email%'`, args: []})).rows[0] as unknown as { total: number | null } | undefined
 
   if (emailMetric && emailMetric.value_30d < 2) {
     recs.push({
@@ -104,10 +104,10 @@ export async function GET() {
   }
 
   // 5. Agent flags (system-level things agents surfaced)
-  const flags = db.prepare(`
+  const flags = (await db.execute({sql: `
     SELECT item_type, item_name, reason, urgency FROM agent_flags
     WHERE status = 'open' ORDER BY created_at DESC LIMIT 2
-  `).all() as { item_type: string; item_name: string; reason: string; urgency: string }[]
+  `, args: []})).rows as unknown as { item_type: string; item_name: string; reason: string; urgency: string }[]
 
   for (const f of flags) {
     recs.push({
@@ -122,8 +122,8 @@ export async function GET() {
   }
 
   // 6. Meta Ads: no campaign data synced
-  const metaConfig = db.prepare('SELECT account_name FROM meta_ads_config LIMIT 1').get()
-  const metaCampaigns = db.prepare('SELECT COUNT(*) as count FROM meta_ads_campaigns').get() as { count: number }
+  const metaConfig = (await db.execute({sql: 'SELECT account_name FROM meta_ads_config LIMIT 1', args: []})).rows[0]
+  const metaCampaigns = (await db.execute({sql: 'SELECT COUNT(*) as count FROM meta_ads_campaigns', args: []})).rows[0] as unknown as { count: number }
   if (metaConfig && metaCampaigns.count === 0) {
     recs.push({
       id: 'meta-sync',

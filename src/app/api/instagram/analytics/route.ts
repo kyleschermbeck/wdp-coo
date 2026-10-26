@@ -3,9 +3,9 @@ import { getDb } from '@/lib/db'
 
 interface IgConfig { access_token: string; ig_user_id: string; username: string | null }
 
-function getConfig(): IgConfig | null {
-  const db = getDb()
-  return db.prepare('SELECT access_token, ig_user_id, username FROM instagram_config WHERE id = 1').get() as IgConfig | null
+async function getConfig(): Promise<IgConfig | null> {
+  const db = await getDb()
+  return (await db.execute({sql: 'SELECT access_token, ig_user_id, username FROM instagram_config WHERE id = 1', args: []})).rows[0] as unknown as IgConfig | null
 }
 
 const BASE = `https://graph.facebook.com/v22.0`
@@ -35,7 +35,7 @@ interface DemographicsResponse {
 }
 
 export async function GET() {
-  const config = getConfig()
+  const config = await getConfig()
   if (!config) return NextResponse.json({ error: 'Instagram not connected' }, { status: 400 })
 
   const { access_token: token, ig_user_id } = config

@@ -3,8 +3,8 @@ import { getDb } from '@/lib/db'
 
 export async function GET() {
   try {
-    const db = getDb()
-    const projects = db.prepare(`
+    const db = await getDb()
+    const projects = (await db.execute({sql: `
       SELECT
         p.*,
         (
@@ -28,13 +28,13 @@ export async function GET() {
         ) as completed_task_count
       FROM projects p
       ORDER BY p.created_at DESC
-    `).all() as Record<string, unknown>[]
+    `, args: []})).rows as unknown as Record<string, unknown>[]
 
     // Attach tags to each project
-    const tagRows = db.prepare(`
+    const tagRows = (await db.execute({sql: `
       SELECT pt.project_id, t.* FROM tags t
       JOIN project_tags pt ON pt.tag_id = t.id
-    `).all() as ({ project_id: number } & Record<string, unknown>)[]
+    `, args: []})).rows as unknown as ({ project_id: number } & Record<string, unknown>)[]
 
     const tagsByProject: Record<number, unknown[]> = {}
     for (const row of tagRows) {
@@ -57,23 +57,17 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const db = getDb()
+    const db = await getDb()
     const body = await req.json()
     const { name, description, status, color, due_date } = body
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
 
-    const result = db.prepare(`
+    const result = await db.execute({sql: `
       INSERT INTO projects (name, description, status, color, due_date)
       VALUES (?, ?, ?, ?, ?)
-    `).run(
-      name.trim(),
-      description?.trim() || null,
-      status || 'planning',
-      color || 'sage',
-      due_date || null
-    )
+    `, args: [name.trim(), description?.trim() || null, status || 'planning', color || 'sage', due_date || null]})
 
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(result.lastInsertRowid)
+    const project = (await db.execute({sql: 'SELECT * FROM projects WHERE id = ?', args: [Number(result.lastInsertRowid)]})).rows[0]
     return NextResponse.json({ ...(project as object), tags: [] }, { status: 201 })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

@@ -10,10 +10,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; attachmentId: string }> }
 ) {
   const { attachmentId } = await params
-  const db = getDb()
+  const db = await getDb()
 
-  const attachment = db.prepare('SELECT * FROM event_attachments WHERE id = ?').get(attachmentId) as
-    | { id: number; filename: string } | undefined
+  const attachment = (await db.execute({sql: 'SELECT * FROM event_attachments WHERE id = ?', args: [attachmentId]})).rows[0] as
+    unknown as | { id: number; filename: string } | undefined
 
   if (!attachment) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -24,6 +24,6 @@ export async function DELETE(
     // File may already be gone — that's fine
   }
 
-  db.prepare('DELETE FROM event_attachments WHERE id = ?').run(attachmentId)
+  await db.execute({sql: 'DELETE FROM event_attachments WHERE id = ?', args: [attachmentId]})
   return NextResponse.json({ ok: true })
 }

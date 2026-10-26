@@ -31,12 +31,12 @@ interface ProductRow {
 }
 
 export async function POST() {
-  const db = getDb()
-  const config = getShopifyConfig(db)
+  const db = await getDb()
+  const config = await getShopifyConfig(db)
   if (!config?.access_token) return NextResponse.json({ error: 'Shopify not connected' }, { status: 400 })
 
   // Get active location
-  let locationId = (db.prepare(`SELECT shopify_id FROM shopify_locations WHERE active = 1 LIMIT 1`).get() as { shopify_id: string } | undefined)?.shopify_id
+  let locationId = ((await db.execute({sql: `SELECT shopify_id FROM shopify_locations WHERE active = 1 LIMIT 1`, args: []})).rows[0] as unknown as { shopify_id: string } | undefined)?.shopify_id
   if (!locationId) {
     const locations = await fetchLocations(config)
     const active = locations.find(l => l.active)
@@ -45,17 +45,15 @@ export async function POST() {
   }
 
   // Build title → shopify_id map for bundle expansion
-  const allProducts = db.prepare(
-    `SELECT shopify_id, title FROM shopify_products WHERE status = 'active' AND is_bundle = 0`
-  ).all() as ProductRow[]
+  const allProducts = (await db.execute({sql: `SELECT shopify_id, title FROM shopify_products WHERE status = 'active' AND is_bundle = 0`, args: []})).rows as unknown as ProductRow[]
   const titleToId: Record<string, string> = {}
   for (const p of allProducts) titleToId[p.title] = p.shopify_id
 
   // Aggregate unfulfilled fulfillable_quantity per product_id (expanding bundle line items)
-  const orders = db.prepare(`
+  const orders = (await db.execute({sql: `
     SELECT line_items FROM shopify_orders
     WHERE fulfillment_status IS NULL OR fulfillment_status IN ('unfulfilled', 'partial')
-  `).all() as OrderRow[]
+  `, args: []})).rows as unknown as OrderRow[]
 
   const needed: Record<string, number> = {}
   for (const order of orders) {
@@ -85,11 +83,11 @@ export async function POST() {
   }
 
   // Get all non-bundle products with inventory tracking
-  const products = db.prepare(`
+  const products = (await db.execute({sql: `
     SELECT shopify_id, title, inventory_item_id, is_bundle
     FROM shopify_products
     WHERE status != 'archived' AND is_bundle = 0
-  `).all() as ShopifyProduct[]
+  `, args: []})).rows as unknown as ShopifyProduct[]
 
   const results: { title: string; shopifyId: string; newQty: number; ok: boolean; error?: string }[] = []
 
@@ -98,8 +96,7 @@ export async function POST() {
     const newQty = -(needed[product.shopify_id] ?? 0)
     try {
       await updateInventoryLevel(config, product.inventory_item_id, locationId, newQty)
-      db.prepare(`UPDATE shopify_products SET inventory_quantity = ? WHERE shopify_id = ?`)
-        .run(newQty, product.shopify_id)
+      await db.execute({sql: `UPDATE shopify_products SET inventory_quantity = ? WHERE shopify_id = ?`, args: [newQty, product.shopify_id]})
       results.push({ title: product.title, shopifyId: product.shopify_id, newQty, ok: true })
     } catch (err) {
       results.push({ title: product.title, shopifyId: product.shopify_id, newQty, ok: false, error: String(err) })

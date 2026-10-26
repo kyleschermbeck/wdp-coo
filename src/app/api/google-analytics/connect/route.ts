@@ -16,12 +16,10 @@ export async function POST(request: Request) {
   }
 
   // Persist the credentials (no tokens yet — those arrive via callback)
-  const db = getDb()
-  db.prepare('DELETE FROM google_analytics_config WHERE id = 1').run()
-  db.prepare(
-    `INSERT INTO google_analytics_config (id, client_id, client_secret, property_id, measurement_id)
-     VALUES (1, ?, ?, ?, ?)`
-  ).run(client_id.trim(), client_secret.trim(), property_id?.trim() ?? null, measurement_id?.trim() ?? null)
+  const db = await getDb()
+  await db.execute({sql: 'DELETE FROM google_analytics_config WHERE id = 1', args: []})
+  await db.execute({sql: `INSERT INTO google_analytics_config (id, client_id, client_secret, property_id, measurement_id)
+     VALUES (1, ?, ?, ?, ?)`, args: [client_id.trim(), client_secret.trim(), property_id?.trim() ?? null, measurement_id?.trim() ?? null]})
 
   // Build the Google OAuth2 authorization URL
   const params = new URLSearchParams({
@@ -39,7 +37,7 @@ export async function POST(request: Request) {
 
 // DELETE — disconnect
 export async function DELETE() {
-  const db = getDb()
-  db.prepare('DELETE FROM google_analytics_config WHERE id = 1').run()
+  const db = await getDb()
+  await db.execute({sql: 'DELETE FROM google_analytics_config WHERE id = 1', args: []})
   return NextResponse.json({ success: true })
 }

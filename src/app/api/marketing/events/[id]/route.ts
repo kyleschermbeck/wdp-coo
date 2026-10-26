@@ -6,13 +6,13 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
+  const db = await getDb()
   const body = await request.json()
   // Only update fields provided in the body
   if (body.date !== undefined) {
-    db.prepare('UPDATE marketing_events SET date = ? WHERE id = ?').run(body.date, id)
+    await db.execute({sql: 'UPDATE marketing_events SET date = ? WHERE id = ?', args: [body.date, id]})
   }
-  const event = db.prepare('SELECT * FROM marketing_events WHERE id = ?').get(id)
+  const event = (await db.execute({sql: 'SELECT * FROM marketing_events WHERE id = ?', args: [id]})).rows[0]
   return NextResponse.json(event)
 }
 
@@ -21,23 +21,21 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
+  const db = await getDb()
   const { title, date, platform, type, status, notes, pillar } = await request.json()
-  db.prepare(`
+  await db.execute({sql: `
     UPDATE marketing_events
     SET title = ?, date = ?, platform = ?, type = ?, status = ?, notes = ?, pillar = ?
     WHERE id = ?
-  `).run(
-    title,
+  `, args: [title,
     date,
     platform ?? 'instagram',
     type ?? 'post',
     status ?? 'planned',
     notes ?? null,
     pillar ?? null,
-    id
-  )
-  const event = db.prepare('SELECT * FROM marketing_events WHERE id = ?').get(id)
+    id]})
+  const event = (await db.execute({sql: 'SELECT * FROM marketing_events WHERE id = ?', args: [id]})).rows[0]
   return NextResponse.json(event)
 }
 
@@ -46,7 +44,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const db = getDb()
-  db.prepare('DELETE FROM marketing_events WHERE id = ?').run(id)
+  const db = await getDb()
+  await db.execute({sql: 'DELETE FROM marketing_events WHERE id = ?', args: [id]})
   return NextResponse.json({ ok: true })
 }

@@ -27,9 +27,9 @@ export async function GET(request: Request) {
   const mediaId = searchParams.get('id')
   if (!mediaId) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  const db = getDb()
-  const config = db.prepare('SELECT access_token FROM instagram_config WHERE id = 1').get() as
-    | { access_token: string } | undefined
+  const db = await getDb()
+  const config = (await db.execute({sql: 'SELECT access_token FROM instagram_config WHERE id = 1', args: []})).rows[0] as
+    unknown as | { access_token: string } | undefined
   if (!config) return NextResponse.json({ error: 'Not connected' }, { status: 400 })
 
   const token = config.access_token

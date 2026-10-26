@@ -13,25 +13,25 @@ function getApiKey(): string | undefined {
   } catch { return undefined }
 }
 
-function getSection(key: string): string {
-  const db = getDb()
-  const row = db.prepare('SELECT content FROM marketing_strategy WHERE section = ?').get(key) as { content: string } | undefined
+async function getSection(key: string): Promise<string> {
+  const db = await getDb()
+  const row = (await db.execute({sql: 'SELECT content FROM marketing_strategy WHERE section = ?', args: [key]})).rows[0] as unknown as { content: string } | undefined
   return row?.content ?? ''
 }
 
-function saveSection(key: string, value: string) {
-  const db = getDb()
-  db.prepare(`
+async function saveSection(key: string, value: string) {
+  const db = await getDb()
+  await db.execute({sql: `
     INSERT INTO marketing_strategy (section, content, updated_at)
     VALUES (?, ?, datetime('now'))
     ON CONFLICT(section) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at
-  `).run(key, value)
+  `, args: [key, value]})
 }
 
 export async function GET() {
-  const notes = getSection('competitive_notes')
-  const insights = getSection('competitive_ai_insights')
-  const refreshedAt = getSection('competitive_refreshed_at')
+  const notes = await getSection('competitive_notes')
+  const insights = await getSection('competitive_ai_insights')
+  const refreshedAt = await getSection('competitive_refreshed_at')
   return NextResponse.json({ notes, insights, refreshed_at: refreshedAt || null })
 }
 
@@ -101,10 +101,9 @@ ${notes ? `FOCUS AREAS / WHAT I WANT TO KNOW:\n${notes}\n\n` : ''}Generate a foc
     saveSection('competitive_ai_insights', JSON.stringify(result))
     saveSection('competitive_refreshed_at', now)
 
-    const db = getDb()
+    const db = await getDb()
     try {
-      db.prepare('INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)')
-        .run('competitive-insights', 'claude-sonnet-5', message.usage.input_tokens, message.usage.output_tokens)
+      await db.execute({sql: 'INSERT INTO api_usage (operation, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)', args: ['competitive-insights', 'claude-sonnet-5', message.usage.input_tokens, message.usage.output_tokens]})
     } catch { /* non-fatal */ }
 
     return NextResponse.json({ insights: result, refreshed_at: now })
