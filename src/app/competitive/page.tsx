@@ -186,7 +186,7 @@ export default function CompetitivePage() {
             {aiResult.summary}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 10 }}>
-            {aiResult.insights.map((ins, i) => (
+            {(Array.isArray(aiResult.insights) ? aiResult.insights : []).map((ins, i) => (
               <div key={i} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.5)', borderRadius: 10, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <p style={{ ...FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#2C2C2C', margin: 0 }}>{ins.category}</p>

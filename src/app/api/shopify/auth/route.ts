@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import crypto from 'crypto'
 
-const SCOPES = 'read_orders,read_all_orders,read_products,read_inventory,read_customers,write_customers,write_products,write_inventory,write_orders,read_fulfillments,write_fulfillments,read_locations'
+const SCOPES = 'read_orders,read_all_orders,read_products,read_inventory,read_customers,write_customers,write_products,write_inventory,write_orders,read_fulfillments,write_fulfillments,read_locations,read_marketing_events'
 const REDIRECT_URI = 'http://localhost:3000/api/shopify/callback'
 
 export async function POST(request: Request) {

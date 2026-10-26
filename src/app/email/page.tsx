@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Mail, Inbox, Wand2, Send, Trash2, Pencil, X, ExternalLink, BarChart2, ChevronDown, ChevronRight, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react'
+import { RefreshCw, Mail, Inbox, Wand2, Send, Trash2, Pencil, X, ExternalLink, BarChart2, ChevronDown, ChevronRight, ChevronUp, AlertTriangle, CheckCircle, Bot, Check, XCircle } from 'lucide-react'
+import type { QueuedEmail } from '@/app/api/email/queue/route'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 
@@ -136,6 +137,11 @@ export default function EmailPage() {
   const [gmailSendAsEmail, setGmailSendAsEmail] = useState<string>('')
   const [fixingName, setFixingName] = useState(false)
   const [nameFixed, setNameFixed] = useState(false)
+  const [view, setView] = useState<'inbox' | 'queue'>('inbox')
+  const [queuedEmails, setQueuedEmails] = useState<QueuedEmail[]>([])
+  const [selectedQueued, setSelectedQueued] = useState<QueuedEmail | null>(null)
+  const [queueLoading, setQueueLoading] = useState(false)
+  const [queueAction, setQueueAction] = useState<Record<number, 'approving' | 'dismissing' | 'deleting' | null>>({})
 
   useEffect(() => {
     fetch('/api/email/gmail-settings')
@@ -185,8 +191,36 @@ export default function EmailPage() {
     if (!data.error) setUsage(data)
   }, [])
 
+  const loadQueue = useCallback(async () => {
+    setQueueLoading(true)
+    try {
+      const res = await fetch('/api/email/queue')
+      const data = await res.json()
+      setQueuedEmails(data.emails ?? [])
+      if (selectedQueued) {
+        const updated = (data.emails ?? []).find((e: QueuedEmail) => e.id === selectedQueued.id)
+        setSelectedQueued(updated ?? null)
+      }
+    } catch { /* */ } finally {
+      setQueueLoading(false)
+    }
+  }, [selectedQueued])
+
+  async function handleQueueAction(id: number, action: 'approve' | 'dismiss' | 'delete') {
+    setQueueAction(prev => ({ ...prev, [id]: action === 'approve' ? 'approving' : action === 'dismiss' ? 'dismissing' : 'deleting' }))
+    await fetch('/api/email/queue', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action }),
+    })
+    await loadQueue()
+    if (selectedQueued?.id === id) setSelectedQueued(null)
+    setQueueAction(prev => ({ ...prev, [id]: null }))
+  }
+
   useEffect(() => { load() }, [load])
   useEffect(() => { loadUsage() }, [loadUsage])
+  useEffect(() => { loadQueue() }, [loadQueue])
 
   useEffect(() => {
     if (selected) {
@@ -248,7 +282,7 @@ export default function EmailPage() {
     const res = await fetch(`/api/email/${selected.id}/draft`, { method: 'POST' })
     const data = await res.json()
     // Append signature after AI draft
-    const withSig = data.draft_body ? `${data.draft_body}\n\n${signature}` : ''
+    const withSig = data.draft_body ? `${data.draft_body}\n\n${signatureText}` : ''
     setDraftBody(withSig)
     await Promise.all([load(), loadUsage()])
     setGeneratingDraft(false)
@@ -558,8 +592,33 @@ export default function EmailPage() {
           </div>
         )}
 
-        {/* Category tabs */}
-        <div className="flex gap-1.5 flex-wrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+        {/* View toggle: Inbox vs Rose Mary Queue */}
+        <div className="flex gap-1.5 mb-3" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+          <button
+            onClick={() => setView('inbox')}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border transition-all cursor-pointer',
+              view === 'inbox' ? 'bg-ink-dark text-cream border-ink-dark' : 'bg-white text-ink border-mushroom hover:border-ink'
+            )}>
+            <Mail className="w-3 h-3" /> Inbox
+          </button>
+          <button
+            onClick={() => { setView('queue'); loadQueue() }}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border transition-all cursor-pointer',
+              view === 'queue' ? 'bg-[#D7FF10] text-black border-[#D7FF10]' : 'bg-white text-ink border-mushroom hover:border-ink'
+            )}>
+            <Bot className="w-3 h-3" /> Rose Mary Queue
+            {queuedEmails.filter(e => e.status === 'pending_review').length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none bg-[#C14B3A] text-white">
+                {queuedEmails.filter(e => e.status === 'pending_review').length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Category tabs — inbox only */}
+        {view === 'inbox' && <div className="flex gap-1.5 flex-wrap" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
           {CATEGORIES.map(cat => {
             const count = countForTab(cat.value)
             return (
@@ -583,11 +642,170 @@ export default function EmailPage() {
               </button>
             )
           })}
-        </div>
+        </div>}
       </div>
 
       {/* Body */}
       <div className="flex-1 flex overflow-hidden">
+
+        {/* ── Rose Mary Queue view ─────────────────────────────────────── */}
+        {view === 'queue' && (
+          <>
+            {/* Queue list */}
+            <div className="border-r border-mushroom overflow-y-auto shrink-0 w-[320px]">
+              {queueLoading && queuedEmails.length === 0 ? (
+                <div className="flex items-center justify-center h-32 text-xs text-ink/50" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                  Loading…
+                </div>
+              ) : queuedEmails.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8 py-16">
+                  <Bot className="w-10 h-10 text-mushroom" />
+                  <p className="text-sm font-semibold text-ink-dark" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>No queued emails</p>
+                  <p className="text-xs text-ink/60" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                    When Rose Mary drafts an email, it will appear here for your review before sending.
+                  </p>
+                </div>
+              ) : (
+                queuedEmails.map(email => (
+                  <div
+                    key={email.id}
+                    onClick={() => setSelectedQueued(email)}
+                    className={cn(
+                      'px-4 py-3 border-b border-mushroom/50 cursor-pointer transition-colors',
+                      selectedQueued?.id === email.id ? 'bg-[#D7FF10]/20' : 'hover:bg-oatmilk'
+                    )}
+                  >
+                    <div className="flex items-start gap-2 mb-1">
+                      <Bot className="w-3.5 h-3.5 text-ink/40 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-ink-dark truncate" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                            {email.to_name || email.to_email || 'No recipient'}
+                          </span>
+                          <span className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded-full border shrink-0 font-medium',
+                            email.status === 'pending_review' ? 'bg-butter/30 text-ink border-butter/60' :
+                            email.status === 'approved' ? 'bg-sage-light text-sage border-sage/30' :
+                            'bg-mushroom/20 text-ink/50 border-mushroom/30'
+                          )} style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                            {email.status === 'pending_review' ? 'Pending' : email.status === 'approved' ? 'Approved' : 'Dismissed'}
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-ink mt-0.5 truncate" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                          {email.subject}
+                        </p>
+                        <p className="text-[11px] text-ink/50 mt-0.5 line-clamp-2 leading-snug" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                          {email.body.slice(0, 100)}…
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-ink/40 mt-1 ml-5" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                      Drafted {formatDate(email.created_at)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Queue detail */}
+            <div className="flex-1 overflow-y-auto">
+              {selectedQueued ? (
+                <div className="p-6 max-w-2xl">
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Bot className="w-4 h-4 text-ink/40" />
+                        <span className="text-[10px] uppercase tracking-wider text-ink/50 font-semibold" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                          Rose Mary Draft
+                        </span>
+                      </div>
+                      <h2 className="text-xl font-bold text-ink-dark" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
+                        {selectedQueued.subject}
+                      </h2>
+                      <p className="text-xs text-ink/60 mt-1" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                        To: {selectedQueued.to_name ? `${selectedQueued.to_name} <${selectedQueued.to_email}>` : selectedQueued.to_email ?? 'No recipient set'}
+                      </p>
+                    </div>
+                    <button onClick={() => setSelectedQueued(null)} className="text-ink/30 hover:text-ink cursor-pointer">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Context note */}
+                  {selectedQueued.context && (
+                    <div className="mb-4 px-3 py-2.5 bg-butter-light border border-butter/60 rounded-xl text-xs text-ink-dark" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                      <span className="font-semibold text-ink/60 uppercase tracking-wider text-[10px]">Context: </span>
+                      {selectedQueued.context}
+                    </div>
+                  )}
+
+                  {/* Email body */}
+                  <div className="bg-white border border-mushroom rounded-xl p-4 mb-4 whitespace-pre-wrap text-sm text-ink-dark leading-relaxed" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                    {selectedQueued.body}
+                  </div>
+
+                  {/* Actions */}
+                  {selectedQueued.status === 'pending_review' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleQueueAction(selectedQueued.id, 'approve')}
+                        disabled={!!queueAction[selectedQueued.id]}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#D7FF10] text-black rounded-lg hover:bg-[#c8f000] transition-colors cursor-pointer disabled:opacity-50"
+                        style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                        <Check className="w-3.5 h-3.5" />
+                        {queueAction[selectedQueued.id] === 'approving' ? 'Approving…' : 'Approve to Send'}
+                      </button>
+                      <button
+                        onClick={() => handleQueueAction(selectedQueued.id, 'dismiss')}
+                        disabled={!!queueAction[selectedQueued.id]}
+                        className="flex items-center gap-1.5 px-4 py-2 text-sm text-ink/60 border border-mushroom rounded-lg hover:border-ink hover:text-ink transition-colors cursor-pointer disabled:opacity-50"
+                        style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                        <XCircle className="w-3.5 h-3.5" />
+                        {queueAction[selectedQueued.id] === 'dismissing' ? 'Dismissing…' : 'Dismiss'}
+                      </button>
+                      <button
+                        onClick={() => handleQueueAction(selectedQueued.id, 'delete')}
+                        disabled={!!queueAction[selectedQueued.id]}
+                        className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs text-ink/40 hover:text-tomato transition-colors cursor-pointer disabled:opacity-50"
+                        style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedQueued.status !== 'pending_review' && (
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        'flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg',
+                        selectedQueued.status === 'approved' ? 'bg-sage-light text-sage' : 'bg-mushroom/20 text-ink/50'
+                      )} style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                        {selectedQueued.status === 'approved' ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                        {selectedQueued.status === 'approved' ? 'Approved' : 'Dismissed'}
+                        {selectedQueued.reviewed_at && ` · ${formatDate(selectedQueued.reviewed_at)}`}
+                      </div>
+                      <button
+                        onClick={() => handleQueueAction(selectedQueued.id, 'delete')}
+                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs text-ink/40 hover:text-tomato transition-colors cursor-pointer"
+                        style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8 text-ink/40">
+                  <Bot className="w-8 h-8" />
+                  <p className="text-sm" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>Select a draft to review</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── Inbox view ───────────────────────────────────────────────── */}
+        {view === 'inbox' && <>
 
         {/* Email list */}
         <div className="border-r border-mushroom overflow-y-auto shrink-0 w-[320px]">
@@ -891,7 +1109,9 @@ export default function EmailPage() {
             </div>
           </div>
         )}
-      </div>
+      </>}
+
+      </div>{/* end Body */}
     </div>
   )
 }

@@ -31,6 +31,7 @@ export interface Task {
   description: string | null
   notes: string | null
   recipe_data: string | null
+  task_group: string | null
   status: TaskStatus
   priority: TaskPriority
   start_date: string | null

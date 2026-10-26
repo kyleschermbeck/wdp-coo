@@ -22,11 +22,14 @@ function getConfig(): MetaConfig | null {
   ).get() as MetaConfig | null
 }
 
-// Try to refresh an expired token using app credentials; returns new token or null
+// Try to refresh an expired token using app credentials; returns new token or null.
+// Falls back to META_APP_ID / META_APP_SECRET env vars if DB values are null.
 async function tryRefreshToken(config: MetaConfig): Promise<string | null> {
-  if (!config.app_id || !config.app_secret) return null
+  const appId     = config.app_id     ?? process.env.META_APP_ID     ?? null
+  const appSecret = config.app_secret ?? process.env.META_APP_SECRET ?? null
+  if (!appId || !appSecret) return null
   try {
-    const url = `${BASE}/oauth/access_token?grant_type=fb_exchange_token&client_id=${config.app_id}&client_secret=${config.app_secret}&fb_exchange_token=${config.access_token}`
+    const url = `${BASE}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${config.access_token}`
     const res = await fetch(url)
     if (!res.ok) return null
     const data = await res.json() as { access_token?: string; expires_in?: number }
@@ -82,7 +85,7 @@ export async function GET(request: Request) {
   // Fire all five requests in parallel
   const [summaryRes, campaignsRes, trendRes, adsRes, creativesRes] = await Promise.all([
     fetch(`${BASE}/${ad_account_id}/insights?fields=${ACCOUNT_METRICS}&${params}`),
-    fetch(`${BASE}/${ad_account_id}/campaigns?fields=id,name,status,objective,insights.time_range(${encodeURIComponent(timeRange)}){${CAMPAIGN_METRICS}}&filtering=[{"field":"effective_status","operator":"IN","value":["ACTIVE","PAUSED"]}]&limit=20&${params}`),
+    fetch(`${BASE}/${ad_account_id}/campaigns?fields=id,name,status,effective_status,objective,daily_budget,lifetime_budget,start_time,stop_time,insights.time_range(${encodeURIComponent(timeRange)}){${CAMPAIGN_METRICS}}&filtering=[{"field":"effective_status","operator":"NOT_IN","value":["DELETED"]}]&limit=100&${params}`),
     fetch(`${BASE}/${ad_account_id}/insights?fields=spend,reach,impressions&time_increment=1&${params}`),
     fetch(`${BASE}/${ad_account_id}/insights?fields=${AD_METRICS}&level=ad&limit=30&${params}`),
     fetch(`${BASE}/${ad_account_id}/ads?fields=id,name,creative{thumbnail_url,image_url}&limit=50&access_token=${access_token}`),
@@ -133,6 +136,8 @@ export async function GET(request: Request) {
   }
   let campaigns: Array<{
     id: string; name: string; status: string; objective?: string
+    daily_budget: number | null; lifetime_budget: number | null
+    start_time: string | null; stop_time: string | null
     spend: number; reach: number; impressions: number; clicks: number
     ctr: number; frequency: number; purchases: number; purchase_value: number
     add_to_carts: number; checkouts: number; roas: number; cost_per_purchase: number
@@ -141,17 +146,31 @@ export async function GET(request: Request) {
   if (campaignsRes.ok) {
     const campaignsData = await campaignsRes.json() as {
       data?: Array<{
-        id: string; name: string; status: string; objective?: string
+        id: string; name: string; status: string; effective_status?: string; objective?: string
+        daily_budget?: string; lifetime_budget?: string
+        start_time?: string; stop_time?: string
         insights?: { data?: InsightRow[] }
       }>
     }
+    const now = Date.now()
     campaigns = (campaignsData.data ?? []).map(c => {
       const i = c.insights?.data?.[0]
       const cSpend         = parseFloat(i?.spend ?? '0')
       const cPurchases     = sumActions(i?.actions, 'purchase')
       const cPurchaseValue = sumActions(i?.action_values, 'purchase')
+      // Prefer effective_status (what Facebook actually considers the status) over configured status.
+      // Also catch the Facebook API bug where campaigns with a past stop_time still report ACTIVE.
+      let resolvedStatus = c.effective_status ?? c.status
+      if (c.stop_time && new Date(c.stop_time).getTime() < now && resolvedStatus === 'ACTIVE') {
+        resolvedStatus = 'COMPLETED'
+      }
       return {
-        id: c.id, name: c.name, status: c.status, objective: c.objective,
+        id: c.id, name: c.name, status: resolvedStatus, objective: c.objective,
+        // budgets come back in cents from the API
+        daily_budget:      c.daily_budget    ? parseFloat(c.daily_budget) / 100    : null,
+        lifetime_budget:   c.lifetime_budget ? parseFloat(c.lifetime_budget) / 100 : null,
+        start_time:        c.start_time ?? null,
+        stop_time:         c.stop_time ?? null,
         spend:             cSpend,
         reach:             parseInt(i?.reach ?? '0', 10),
         impressions:       parseInt(i?.impressions ?? '0', 10),

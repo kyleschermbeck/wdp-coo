@@ -7,6 +7,7 @@ export interface ShopifyConfig {
   store_url: string
   access_token: string
   last_synced_at: string | null
+  theme_id: string | null
 }
 
 export interface ShopifyLineItem {
@@ -122,6 +123,14 @@ function shopifyFetch(config: ShopifyConfig, path: string, options: RequestInit 
       ...(options.headers ?? {}),
     },
   })
+}
+
+// ─── Theme-scoped fetch ───────────────────────────────────────────────────────
+
+/** Call a Shopify Admin API endpoint scoped to a specific theme. */
+export function shopifyThemeFetch(config: ShopifyConfig, path: string, options: RequestInit = {}) {
+  if (!config.theme_id) throw new Error('No theme_id configured in Shopify settings')
+  return shopifyFetch(config, `/themes/${config.theme_id}${path}`, options)
 }
 
 // ─── Connection test ──────────────────────────────────────────────────────────

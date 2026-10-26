@@ -10,13 +10,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const pkgLbs = package_weight != null ? parseFloat(package_weight) : null
   const pkgExtraOz = package_extra_oz != null ? parseFloat(package_extra_oz) : 0
   const servSize = serving_size != null ? parseFloat(serving_size) : null
-  const servUnit = serving_unit === 'tsp' ? 'tsp' : 'oz'
+  const servUnit = serving_unit === 'tsp' ? 'tsp' : serving_unit === 'tbsp' ? 'tbsp' : 'oz'
   const totalServings = total_servings != null ? parseInt(total_servings) : 0
   const pkgCost = package_cost != null ? parseFloat(package_cost) : null
   const pkgOz = (pkgLbs ?? 0) * 16 + pkgExtraOz
   let ozPerTbsp: number | null = null
   if (servSize && totalServings && pkgOz) {
-    if (servUnit === 'tsp') {
+    if (servUnit === 'tbsp') {
+      const totalTbsp = totalServings * servSize
+      ozPerTbsp = totalTbsp > 0 ? pkgOz / totalTbsp : null
+    } else if (servUnit === 'tsp') {
       const totalTbsp = (totalServings * servSize) / 3
       ozPerTbsp = totalTbsp > 0 ? pkgOz / totalTbsp : null
     } else {
@@ -27,7 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   db.prepare(`
     UPDATE supplies SET name=?, vendor=?, order_url=?, package_weight=?, weight_unit='lb',
     package_extra_oz=?, serving_size=?, serving_unit=?, total_servings=?,
-    package_cost=?, oz_per_tbsp=?, category=?, active=?
+    package_cost=?, oz_per_tbsp=?, category=?, active=?, updated_at=datetime('now')
     WHERE id=?
   `).run(
     name?.trim() || null, vendor || null, order_url || null,
@@ -42,6 +45,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     active === false ? 0 : 1,
     id
   )
+  const row = db.prepare('SELECT * FROM supplies WHERE id = ?').get(id)
+  return NextResponse.json(row)
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const db = getDb()
+  const { id } = await params
+  const body = await req.json()
+  if ('containers_on_hand' in body) {
+    const val = Math.max(0, parseFloat(body.containers_on_hand) || 0)
+    db.prepare(`UPDATE supplies SET containers_on_hand = ? WHERE id = ?`).run(val, id)
+  }
   const row = db.prepare('SELECT * FROM supplies WHERE id = ?').get(id)
   return NextResponse.json(row)
 }

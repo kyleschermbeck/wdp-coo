@@ -57,39 +57,49 @@ You make weeknight cooking feel elevated but never intimidating.`,
   },
 ]
 
+const BG_THEMES = [
+  { id: 'cream', label: 'Cream',  hex: '#FAF9F6', desc: 'Warm parchment — the WDP default' },
+  { id: 'white', label: 'Clean',  hex: '#FFFFFF', desc: 'Bright white — pops the neon accents' },
+  { id: 'dark',  label: 'Dark',   hex: '#0F0F0E', desc: 'Near-black — easy on the eyes at night' },
+]
+
 const ACCENT_THEMES = [
-  { id: 'terracotta', label: 'Terracotta', hex: '#C17A5E' },
-  { id: 'sage',       label: 'Sage',       hex: '#7A9E7E' },
-  { id: 'thyme',      label: 'Thyme',      hex: '#6B7C5C' },
-  { id: 'butter',     label: 'Butter',     hex: '#E8C84A' },
-  { id: 'blueberry',  label: 'Blueberry',  hex: '#4A5568' },
-  { id: 'candy',      label: 'Candy',      hex: '#D4688C' },
+  { id: 'lime',       label: 'Lime',       hex: '#D7FF10', note: 'brand neon' },
+  { id: 'terracotta', label: 'Terracotta', hex: '#C27A54', note: 'warm signature' },
+  { id: 'mint',       label: 'Mint',       hex: '#80E6A6', note: 'brand neon' },
+  { id: 'teal',       label: 'Teal',       hex: '#78B7C5', note: 'cool accent' },
+  { id: 'sage',       label: 'Sage',       hex: '#9BAE9A', note: 'earthy' },
+  { id: 'candy',      label: 'Candy',      hex: '#F8AFA8', note: 'soft pink' },
+  { id: 'butter',     label: 'Butter',     hex: '#F0D77A', note: 'warm yellow' },
 ]
 
 type Settings = Record<string, string>
 type UsageRow = { operation: string; model: string; input_tokens: number; output_tokens: number; call_count: number }
 
 // Apply appearance settings to the document immediately (no page reload needed)
-function applyAppearance(fontSize: string, density: string) {
+function applyAppearance(fontSize: string, density: string, bgTheme: string, accent: string) {
   try {
-    // Apply zoom directly via inline style — CSS attribute selectors don't survive Tailwind v4 compilation
-    const zoomMap: Record<string, string> = { sm: '0.88', md: '1', lg: '1.12' }
-    document.documentElement.style.zoom = zoomMap[fontSize] ?? '1'
+    const el = document.documentElement
 
-    // Sidebar density — compact reduces nav link padding
+    // Font size via inline zoom
+    const zoomMap: Record<string, string> = { sm: '0.88', md: '1', lg: '1.12' }
+    el.style.zoom = zoomMap[fontSize] ?? '1'
+
+    // Sidebar density
     const navLinks = document.querySelectorAll<HTMLElement>('nav a')
     navLinks.forEach(a => {
-      if (density === 'compact') {
-        a.style.paddingTop = '0.375rem'
-        a.style.paddingBottom = '0.375rem'
-      } else {
-        a.style.paddingTop = ''
-        a.style.paddingBottom = ''
-      }
+      a.style.paddingTop = density === 'compact' ? '0.375rem' : ''
+      a.style.paddingBottom = density === 'compact' ? '0.375rem' : ''
     })
+
+    // Theme + accent via data-attrs (CSS custom props pick them up instantly)
+    el.setAttribute('data-theme', bgTheme)
+    el.setAttribute('data-accent', accent)
 
     localStorage.setItem('wdp_font_size', fontSize)
     localStorage.setItem('wdp_density', density)
+    localStorage.setItem('wdp_theme', bgTheme)
+    localStorage.setItem('wdp_accent', accent)
   } catch { /* localStorage unavailable */ }
 }
 
@@ -119,6 +129,7 @@ function TextInput({ value, onChange, placeholder, multiline, type }: { value: s
 // ─── Appearance ─────────────────────────────────
 function AppearanceTab({ settings, onSave }: { settings: Settings; onSave: (p: Settings) => void }) {
   const [fontSize, setFontSize] = useState('md')
+  const [bgTheme, setBgTheme]   = useState('cream')
   const [accent, setAccent]     = useState('terracotta')
   const [density, setDensity]   = useState('comfortable')
   const [dirty, setDirty]       = useState(false)
@@ -126,16 +137,31 @@ function AppearanceTab({ settings, onSave }: { settings: Settings; onSave: (p: S
 
   useEffect(() => {
     setFontSize(settings['appearance:font_size'] ?? localStorage.getItem('wdp_font_size') ?? 'md')
-    setAccent(settings['appearance:accent'] ?? 'terracotta')
+    setBgTheme(settings['appearance:bg_theme'] ?? localStorage.getItem('wdp_theme') ?? 'cream')
+    setAccent(settings['appearance:accent'] ?? localStorage.getItem('wdp_accent') ?? 'terracotta')
     setDensity(settings['appearance:density'] ?? localStorage.getItem('wdp_density') ?? 'comfortable')
     setDirty(false)
   }, [settings])
 
   function set<T>(setter: (v: T) => void, v: T) { setter(v); setDirty(true); setApplied(false) }
 
+  // Live preview — applies instantly without saving
+  function preview(nextBg: string, nextAccent: string) {
+    try {
+      const el = document.documentElement
+      el.setAttribute('data-theme', nextBg)
+      el.setAttribute('data-accent', nextAccent)
+    } catch { /* ignore */ }
+  }
+
   function handleSave() {
-    applyAppearance(fontSize, density)
-    onSave({ 'appearance:font_size': fontSize, 'appearance:accent': accent, 'appearance:density': density })
+    applyAppearance(fontSize, density, bgTheme, accent)
+    onSave({
+      'appearance:font_size': fontSize,
+      'appearance:bg_theme':  bgTheme,
+      'appearance:accent':    accent,
+      'appearance:density':   density,
+    })
     setDirty(false)
     setApplied(true)
     setTimeout(() => setApplied(false), 2500)
@@ -143,6 +169,78 @@ function AppearanceTab({ settings, onSave }: { settings: Settings; onSave: (p: S
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Background / Theme */}
+      <div style={cardStyle()}>
+        <FieldLabel text="Background Theme" />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {BG_THEMES.map(t => (
+            <button
+              key={t.id}
+              onClick={() => { set(setBgTheme, t.id); preview(t.id, accent) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 16px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                background: bgTheme === t.id ? t.hex : CREAM,
+                border: bgTheme === t.id ? `2px solid ${INK}` : BORDER,
+                fontFamily: FONT,
+              }}
+            >
+              <span style={{
+                width: 28, height: 28, borderRadius: 6, background: t.hex, flexShrink: 0, display: 'inline-block',
+                border: '1px solid rgba(0,0,0,0.10)',
+                boxShadow: bgTheme === t.id ? '0 0 0 3px rgba(44,44,44,0.18)' : undefined,
+              }} />
+              <span>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: bgTheme === t.id && t.id === 'dark' ? '#fff' : INK }}>
+                  {t.label}
+                </span>
+                <span style={{ display: 'block', fontSize: 11, color: INK_LIGHT, marginTop: 1 }}>{t.desc}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <p style={{ fontFamily: FONT, fontSize: 12, color: INK_LIGHT, marginTop: 8, marginBottom: 0 }}>
+          Changes apply instantly across the whole app. Saved for your next visit.
+        </p>
+      </div>
+
+      {/* Accent Color */}
+      <div style={cardStyle()}>
+        <FieldLabel text="Accent Color" />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {ACCENT_THEMES.map(t => (
+            <button
+              key={t.id}
+              onClick={() => { set(setAccent, t.id); preview(bgTheme, t.id) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 14px', borderRadius: 7, cursor: 'pointer',
+                background: accent === t.id ? t.hex + '28' : CREAM,
+                border: accent === t.id ? `2px solid ${t.hex}` : BORDER,
+                fontFamily: FONT, fontSize: 13, fontWeight: 600, color: INK,
+              }}
+            >
+              <span style={{
+                width: 14, height: 14, borderRadius: '50%',
+                background: t.hex, display: 'inline-block', flexShrink: 0,
+                border: '1px solid rgba(0,0,0,0.08)',
+              }} />
+              <span>
+                {t.label}
+                {t.note && (
+                  <span style={{ fontWeight: 400, color: INK_LIGHT, marginLeft: 4, fontSize: 11 }}>· {t.note}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p style={{ fontFamily: FONT, fontSize: 12, color: INK_LIGHT, marginTop: 8, marginBottom: 0 }}>
+          Used for the send button, active nav icon, and interactive highlights.
+        </p>
+      </div>
+
+      {/* Font Size */}
       <div style={cardStyle()}>
         <FieldLabel text="Font Size" />
         <div style={{ display: 'flex', gap: 10 }}>
@@ -164,27 +262,7 @@ function AppearanceTab({ settings, onSave }: { settings: Settings; onSave: (p: S
         </p>
       </div>
 
-      <div style={cardStyle()}>
-        <FieldLabel text="Accent Color" />
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {ACCENT_THEMES.map(t => (
-            <button key={t.id} onClick={() => set(setAccent, t.id)} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 14px', borderRadius: 7, cursor: 'pointer',
-              background: accent === t.id ? t.hex + '20' : CREAM,
-              border: accent === t.id ? `2px solid ${t.hex}` : BORDER,
-              fontFamily: FONT, fontSize: 13, fontWeight: 600, color: INK,
-            }}>
-              <span style={{ width: 14, height: 14, borderRadius: '50%', background: t.hex, display: 'inline-block', flexShrink: 0 }} />
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <p style={{ fontFamily: FONT, fontSize: 12, color: INK_LIGHT, marginTop: 8, marginBottom: 0 }}>
-          Accent color preference is saved for future theme updates.
-        </p>
-      </div>
-
+      {/* Sidebar Density */}
       <div style={cardStyle()}>
         <FieldLabel text="Sidebar Density" />
         <div style={{ display: 'flex', gap: 10 }}>

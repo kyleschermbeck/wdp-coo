@@ -53,13 +53,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Ad account is disabled' }, { status: 400 })
   }
 
+  // Use provided app credentials, or fall back to env vars
+  const resolvedAppId     = app_id     || process.env.META_APP_ID     || undefined
+  const resolvedAppSecret = app_secret || process.env.META_APP_SECRET || undefined
+
   // Try to exchange for a long-lived token if app credentials were supplied
   let finalToken = access_token
   let tokenExpiry: number | null = null
   let exchanged = false
 
-  if (app_id && app_secret) {
-    const result = await exchangeForLongLived(access_token, app_id, app_secret)
+  if (resolvedAppId && resolvedAppSecret) {
+    const result = await exchangeForLongLived(access_token, resolvedAppId, resolvedAppSecret)
     if (result.token !== access_token) {
       finalToken = result.token
       tokenExpiry = result.expiry
@@ -79,7 +83,7 @@ export async function POST(request: Request) {
       app_secret = excluded.app_secret,
       token_expiry = excluded.token_expiry,
       connected_at = excluded.connected_at
-  `).run(finalToken, accountId, account.name ?? null, app_id ?? null, app_secret ?? null, tokenExpiry)
+  `).run(finalToken, accountId, account.name ?? null, resolvedAppId ?? null, resolvedAppSecret ?? null, tokenExpiry)
 
   return NextResponse.json({
     ok: true,

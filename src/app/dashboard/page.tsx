@@ -1,1056 +1,623 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { Package, ExternalLink } from 'lucide-react'
-import { marked } from 'marked'
-import { TaskDetailDrawer } from '@/components/projects/TaskDetailDrawer'
-import { SubtaskDetailDrawer } from '@/components/projects/SubtaskDetailDrawer'
-import type { Task as LibTask, Subtask as LibSubtask } from '@/lib/types'
-import { StatusRail } from '@/components/ui/StatusRail'
-import { PageHeader } from '@/components/ui/PageHeader'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import {
+  TrendingUp, TrendingDown, Package, Users, Mail, ClipboardList,
+  AlertCircle, ArrowUpRight, RefreshCw, Loader2, MessageCircle,
+  ShoppingBag, Star,
+} from 'lucide-react'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface Task {
-  id: number
-  title: string
-  status: string
-  priority: string
-  due_date: string | null
-  project_name: string
-  project_color: string
-}
-
-interface DueSubtask {
-  id: number
-  title: string
-  completed: number
-  due_date: string | null
-  task_id: number
-  task_title: string
-  project_id: number | null
-  project_name: string | null
-  project_color: string | null
-}
-
-interface Agent {
-  id: number
-  name: string
-  description: string | null
-  active: number
-}
-
-interface InventoryRow {
-  id: number
-  title: string
-  shopify_qty: number
-  reorder_threshold: number
-  accent_color: string
-  status: string
-  is_bundle: number
-}
-
-interface MarketingEvent {
-  id: number
-  title: string
-  date: string
-  platform: string
-  published: boolean
-}
-
-interface ShopifyOrder {
-  id: number
-  created_at: string
-  total_price: string
-  financial_status: string
-  line_items: string  // JSON array with product_id and quantity
-}
-
-interface BundleComponent {
-  bundle_shopify_id: string
-  component_shopify_id: string
-  quantity: number
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function greeting(): string {
-  const now = new Date()
-  const h = now.getHours()
-  const day = now.getDay()
-  const MORNING = [
-    'Good morning, Kyle.',
-    'Rise and spice, Kyle.',
-    'Time to get blending, Kyle.',
-    'Morning, Kyle — the flavors await.',
-  ]
-  const AFTERNOON = [
-    'Good afternoon, Kyle.',
-    'Midday check-in, Kyle.',
-    'The kitchen\'s heating up, Kyle.',
-    'Afternoon, Kyle — still simmering.',
-  ]
-  const EVENING = [
-    'Good evening, Kyle.',
-    'Let\'s see what\'s cooking, Kyle.',
-    'Dinner hour, Kyle.',
-    'Spice up your evening, Kyle.',
-  ]
-  const bank = h < 12 ? MORNING : h < 17 ? AFTERNOON : EVENING
-  return bank[day % bank.length]
-}
-
-function formatDate(): string {
-  return new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function fmt$(n: number): string {
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`
-  return `$${n.toFixed(0)}`
-}
-
-function fmtNum(n: number | undefined | null): string {
-  if (n == null || isNaN(n)) return '—'
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
-  return String(Math.round(n))
-}
-
-const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
-const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
-  high: { bg: '#FDE8E8', text: '#C14B3A' },
-  medium: { bg: '#FBF0E3', text: '#C27A54' },
-  low: { bg: '#F0F4EF', text: '#6B8F6A' },
-}
-
-function weekLabel(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-// Build 5 weekly revenue buckets from orders
-function buildWeeklyRevenue(
-  orders: ShopifyOrder[],
-  bundleJarsMap: Map<string, number>,
-): { label: string; revenue: number; units: number }[] {
-  const now = new Date()
-  const weeks: { label: string; revenue: number; units: number }[] = []
-  for (let i = 4; i >= 0; i--) {
-    const end = new Date(now)
-    end.setDate(end.getDate() - i * 7)
-    const start = new Date(end)
-    start.setDate(start.getDate() - 7)
-    const label = i === 0 ? weekLabel(start) + '*' : weekLabel(start)
-    const weekOrders = orders.filter((o) => {
-      const d = new Date(o.created_at)
-      return d >= start && d < end && o.financial_status !== 'voided' && o.financial_status !== 'refunded'
-    })
-    const revenue = weekOrders.reduce((s, o) => s + parseFloat(o.total_price), 0)
-    let units = 0
-    for (const o of weekOrders) {
-      try {
-        const items = JSON.parse(o.line_items) as Array<{ product_id?: number | string; quantity: number }>
-        for (const item of items) {
-          const pid = item.product_id != null ? String(item.product_id) : null
-          const jars = pid ? (bundleJarsMap.get(pid) ?? 1) : 1
-          units += jars * item.quantity
-        }
-      } catch { /* skip malformed */ }
-    }
-    weeks.push({ label, revenue, units })
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface DashData {
+  revenue: {
+    last30d: number; orders30d: number; aov: number
+    thisWeek: number; ordersThisWeek: number; weekChange: number | null
+    allTime: number; allTimeOrders: number
   }
-  return weeks
+  dailyRevenue: { day: string; revenue: number; orders: number }[]
+  topProducts: { product: string; units: number; revenue: number }[]
+  customers: { total: number; byMonth: { month: string; new_customers: number }[]; repeatBuyers: number }
+  email: { totalSubscribers: number; lists: { name: string; profile_count: number }[]; recentCampaigns: { name: string; send_time: string; unique_opens: number; unique_clicks: number; revenue: number }[] }
+  inventory: { active_skus: number; draft_skus: number; negative_stock: number; zero_stock: number; critical_low: number; healthy: number }
+  tasks: { total: number; done: number; overdue: number; urgent: number }
 }
 
-// ─── Revenue Chart ────────────────────────────────────────────────────────────
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const FONT  = "'Jost', system-ui, sans-serif"
+const SERIF = "'Cormorant Garamond', Georgia, serif"
 
-function RevenueChart({ weeks }: { weeks: { label: string; revenue: number; units: number }[] }) {
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
-  const svgRef = useRef<SVGSVGElement>(null)
-  const W = 700
-  const H = 100
-  const PAD = { l: 10, r: 10, t: 14, b: 6 }
+function fmt$(n: number) {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+}
+function fmtFull$(n: number) {
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+function shortMonth(m: string) {
+  const [, mo] = m.split('-')
+  return ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(mo)] ?? m
+}
+function shortDay(d: string) {
+  const dt = new Date(d + 'T12:00:00')
+  return (dt.getMonth() + 1) + '/' + dt.getDate()
+}
 
-  const maxRev = Math.max(...weeks.map((w) => w.revenue), 1)
-  const pts = weeks.map((w, i) => {
-    const x = PAD.l + (i / (weeks.length - 1)) * (W - PAD.l - PAD.r)
-    const y = PAD.t + (1 - w.revenue / maxRev) * (H - PAD.t - PAD.b)
-    return { x, y, ...w }
-  })
-
-  const linePoints = pts.map((p) => `${p.x},${p.y}`).join(' ')
-  const areaPoints = [
-    `${pts[0].x},${H - PAD.b}`,
-    ...pts.map((p) => `${p.x},${p.y}`),
-    `${pts[pts.length - 1].x},${H - PAD.b}`,
-  ].join(' ')
+// ── Inline SVG bar chart ──────────────────────────────────────────────────────
+function BarChart({ data, valueKey, labelKey, color = 'var(--wdp-neon, #D7FF10)', height = 80 }: {
+  data: Record<string, number | string>[]
+  valueKey: string
+  labelKey: string
+  color?: string
+  height?: number
+}) {
+  const values = data.map(d => Number(d[valueKey]) ?? 0)
+  const max = Math.max(...values, 1)
+  const W = 100 / data.length
 
   return (
-    <div style={{ position: 'relative' }}>
-      <svg
-        ref={svgRef}
-        width="100%"
-        height={H}
-        viewBox={`0 0 ${W} ${H}`}
-        style={{ display: 'block', overflow: 'visible' }}
-      >
-        <polygon points={areaPoints} fill="rgba(155,174,154,0.16)" stroke="none" />
-        <polyline
-          points={linePoints}
-          fill="none"
-          stroke="#9BAE9A"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        {pts.map((p, i) => (
-          <g key={i} onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)} style={{ cursor: 'pointer' }}>
-            <circle cx={p.x} cy={p.y} r={14} fill="transparent" />
-            {hoveredIdx === i && <circle cx={p.x} cy={p.y} r={8} fill="rgba(155,174,154,0.35)" />}
-            <circle cx={p.x} cy={p.y} r={3.5} fill="#9BAE9A" stroke="#fff" strokeWidth={1.5} />
-          </g>
-        ))}
+    <div style={{ width: '100%', overflow: 'hidden' }}>
+      <svg viewBox={`0 0 ${data.length * 24} ${height + 22}`} style={{ width: '100%', display: 'block' }} preserveAspectRatio="none">
+        {data.map((d, i) => {
+          const v = Number(d[valueKey]) ?? 0
+          const barH = max > 0 ? (v / max) * height : 0
+          const x = i * 24
+          return (
+            <g key={i}>
+              <rect
+                x={x + 2}
+                y={height - barH}
+                width={20}
+                height={barH}
+                rx={3}
+                fill={v > 0 ? color : 'rgba(120,120,120,0.15)'}
+                opacity={v > 0 ? 0.9 : 1}
+              />
+              <text
+                x={x + 12}
+                y={height + 14}
+                textAnchor="middle"
+                fontSize={8}
+                fill="rgba(116,116,116,0.7)"
+                fontFamily={FONT}
+              >
+                {String(d[labelKey])}
+              </text>
+            </g>
+          )
+        })}
       </svg>
-
-      {hoveredIdx !== null && (() => {
-        const p = pts[hoveredIdx]
-        const pct = (p.x / W) * 100
-        return (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: `${pct}%`,
-              transform: 'translate(-50%, -108%)',
-              background: '#2C2C2C',
-              borderRadius: 10,
-              padding: '12px 14px',
-              minWidth: 160,
-              boxShadow: '0 8px 24px rgba(60,48,36,0.2)',
-              pointerEvents: 'none',
-              zIndex: 5,
-            }}
-          >
-            <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(250,249,246,0.6)', margin: '0 0 4px' }}>{p.label}</p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: '#FAF9F6', margin: '0 0 2px' }}>
-              {p.revenue === 0 ? '—' : fmt$(p.revenue)}
-            </p>
-            <p style={{ fontSize: 11.5, color: 'rgba(250,249,246,0.7)', margin: 0 }}>
-              {p.revenue === 0 ? 'No orders yet' : `${p.units} units sold`}
-            </p>
-          </div>
-        )
-      })()}
-
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weeks.length},1fr)`, marginTop: 4 }}>
-        {weeks.map((w, i) => (
-          <p key={i} style={{ fontSize: 10.5, color: '#747474', margin: 0, textAlign: 'center' }}>{w.label}</p>
-        ))}
-      </div>
     </div>
   )
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────────
+// Horizontal bar chart for top products
+function HBarChart({ data, max }: { data: { label: string; value: number }[]; max: number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+      {data.map((d, i) => (
+        <div key={i}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: 'var(--wdp-ink)', fontWeight: 500, lineHeight: 1.2 }}>{d.label}</span>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: 'var(--wdp-ink-mid)', fontVariantNumeric: 'tabular-nums' }}>{fmt$(d.value)}</span>
+          </div>
+          <div style={{ height: 5, background: 'var(--wdp-border)', borderRadius: 99, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%',
+              width: `${Math.max((d.value / max) * 100, 2)}%`,
+              background: i === 0 ? 'var(--wdp-neon, #D7FF10)' : i === 1 ? '#C27A54' : 'var(--wdp-ink-mid)',
+              borderRadius: 99,
+              opacity: 1 - i * 0.1,
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
+// ── KPI tile ──────────────────────────────────────────────────────────────────
+function KPITile({
+  label, value, sub, icon: Icon, iconColor, iconBg, delta, deltaLabel, alert,
+}: {
+  label: string; value: string; sub?: string
+  icon: React.ElementType; iconColor: string; iconBg: string
+  delta?: number | null; deltaLabel?: string; alert?: boolean
+}) {
+  const up = delta !== undefined && delta !== null && delta >= 0
+  const DeltaIcon = up ? TrendingUp : TrendingDown
+
+  return (
+    <div style={{
+      background: 'var(--wdp-surface, #FFFFFF)',
+      border: '1px solid var(--wdp-border)',
+      borderRadius: 12,
+      padding: '16px 18px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      ...(alert ? { borderLeftWidth: 3, borderLeftColor: '#C14B3A' } : {}),
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)' }}>
+          {label}
+        </span>
+        <div style={{ width: 28, height: 28, borderRadius: 7, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon size={13} style={{ color: iconColor }} strokeWidth={2} />
+        </div>
+      </div>
+      <div>
+        <div style={{ fontFamily: FONT, fontSize: 24, fontWeight: 800, color: 'var(--wdp-ink)', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px' }}>
+          {value}
+        </div>
+        {sub && <div style={{ fontFamily: FONT, fontSize: 11, color: 'var(--wdp-ink-mid)', marginTop: 4 }}>{sub}</div>}
+      </div>
+      {delta !== undefined && delta !== null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <DeltaIcon size={11} style={{ color: up ? '#2A7A52' : '#C14B3A' }} strokeWidth={2.5} />
+          <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: up ? '#2A7A52' : '#C14B3A' }}>
+            {Math.abs(delta)}% {deltaLabel ?? (up ? 'vs last week' : 'vs last week')}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Section header ────────────────────────────────────────────────────────────
+function SectionHead({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <h2 style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: 'var(--wdp-ink)', letterSpacing: '-0.3px', margin: 0 }}>
+        {title}
+      </h2>
+      {action && (
+        <button onClick={onAction} style={{
+          fontFamily: FONT, fontSize: 11, fontWeight: 600, color: 'var(--wdp-ink-mid)',
+          background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.05em',
+        }}>
+          {action}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Card wrapper ──────────────────────────────────────────────────────────────
+function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{
+      background: 'var(--wdp-surface, #FFFFFF)',
+      border: '1px solid var(--wdp-border)',
+      borderRadius: 12,
+      padding: '18px 20px',
+      ...style,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const router = useRouter()
-
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [dueSubtasks, setDueSubtasks] = useState<DueSubtask[]>([])
-  const [inventory, setInventory] = useState<InventoryRow[]>([])
-  const [events, setEvents] = useState<MarketingEvent[]>([])
-  const [orders, setOrders] = useState<ShopifyOrder[]>([])
-  const [bundleComponents, setBundleComponents] = useState<BundleComponent[]>([])
-  const [projects, setProjects] = useState<{ id: number; status: string }[]>([])
-  const [checkedTaskIds, setCheckedTaskIds] = useState<Set<number>>(new Set())
-  const [checkedSubtaskIds, setCheckedSubtaskIds] = useState<Set<number>>(new Set())
+  const [data, setData] = useState<DashData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [igFollowers, setIgFollowers] = useState<number | null>(null)
-  const [igEngRate, setIgEngRate] = useState<number | null>(null)
-  const [emailSubs, setEmailSubs] = useState<number | null>(null)
-  const [brief, setBrief] = useState<string | null>(null)
-  const [briefLoading, setBriefLoading] = useState(false)
-  const [briefGeneratedAt, setBriefGeneratedAt] = useState<string | null>(null)
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [drawerTask, setDrawerTask] = useState<LibTask | null>(null)
-  const [drawerSubtask, setDrawerSubtask] = useState<LibSubtask | null>(null)
-  const [igStoryReach, setIgStoryReach] = useState<number | null>(null)
-  const [contentIdeas, setContentIdeas] = useState<Array<{ id: string; format: string; title: string; hook: string; caption_concept: string; why: string }>>([])
-  const kpiColRef = useRef<HTMLDivElement>(null)
-  const briefCardRef = useRef<HTMLDivElement>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useLayoutEffect(() => {
-    const sync = () => {
-      const kpi = kpiColRef.current
-      const brief = briefCardRef.current
-      if (kpi && brief) brief.style.height = kpi.offsetHeight + 'px'
-    }
-    sync()
-    const ro = new ResizeObserver(sync)
-    if (kpiColRef.current) ro.observe(kpiColRef.current)
-    return () => ro.disconnect()
-  })
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const now = new Date()
-        const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-        const nextMonthStr = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`
-
-        const [tasksRes, subtasksRes, invRes, eventsRes, eventsNextRes, ordersRes, bundleCompRes, projRes, igRes, klaviyoRes, agentsRes] = await Promise.allSettled([
-          fetch('/api/tasks').then((r) => r.json()),
-          fetch('/api/subtasks').then((r) => r.json()),
-          fetch('/api/inventory').then((r) => r.json()),
-          fetch(`/api/marketing/events?month=${thisMonth}`).then((r) => r.json()),
-          fetch(`/api/marketing/events?month=${nextMonthStr}`).then((r) => r.json()),
-          fetch('/api/shopify/orders?limit=250').then((r) => r.json()),
-          fetch('/api/inventory/bundle-components').then((r) => r.json()),
-          fetch('/api/projects').then((r) => r.json()),
-          fetch('/api/instagram/analytics').then((r) => r.json()),
-          fetch('/api/klaviyo/data').then((r) => r.json()),
-          fetch('/api/agents').then((r) => r.json()),
-        ])
-
-        if (tasksRes.status === 'fulfilled' && Array.isArray(tasksRes.value)) setTasks(tasksRes.value)
-        if (subtasksRes.status === 'fulfilled' && Array.isArray(subtasksRes.value)) {
-          const cutoff = new Date(); cutoff.setDate(cutoff.getDate() + 7); cutoff.setHours(23, 59, 59, 999)
-          const due = (subtasksRes.value as DueSubtask[]).filter(s => {
-            if (s.completed || !s.due_date) return false
-            return new Date(s.due_date + 'T00:00:00') <= cutoff
-          })
-          setDueSubtasks(due)
-        }
-        if (invRes.status === 'fulfilled' && invRes.value?.rows) setInventory(invRes.value.rows)
-        const allEvents: MarketingEvent[] = []
-        if (eventsRes.status === 'fulfilled' && Array.isArray(eventsRes.value)) allEvents.push(...eventsRes.value)
-        if (eventsNextRes.status === 'fulfilled' && Array.isArray(eventsNextRes.value)) allEvents.push(...eventsNextRes.value)
-        setEvents(allEvents)
-        if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) setOrders(ordersRes.value)
-        if (bundleCompRes.status === 'fulfilled' && Array.isArray(bundleCompRes.value)) setBundleComponents(bundleCompRes.value)
-        if (projRes.status === 'fulfilled' && Array.isArray(projRes.value)) setProjects(projRes.value)
-
-        // Audience metrics
-        if (igRes.status === 'fulfilled') {
-          const ig = igRes.value as {
-            profile?: { followers_count?: number }
-            media?: { like_count?: number; comments_count?: number; insights?: { reach?: number } }[]
-            stories?: { insights?: { reach?: number } }[]
-          }
-          setIgFollowers(ig.profile?.followers_count ?? null)
-          const posts = ig.media ?? []
-          if (posts.length > 0) {
-            const postsWithReach = posts.filter(p => (p.insights?.reach ?? 0) > 1)
-            if (postsWithReach.length > 0) {
-              const avg = postsWithReach.reduce((s, p) => {
-                const r = p.insights!.reach!
-                return s + ((p.like_count ?? 0) + (p.comments_count ?? 0)) / r * 100
-              }, 0) / postsWithReach.length
-              if (avg <= 100) setIgEngRate(Math.round(avg * 10) / 10)
-            }
-          }
-          const storyReach = (ig.stories ?? []).reduce((s, st) => s + (st.insights?.reach ?? 0), 0)
-          if (storyReach > 0) setIgStoryReach(storyReach)
-        }
-        if (klaviyoRes.status === 'fulfilled') {
-          const kd = klaviyoRes.value as { lists?: { profile_count?: number }[] }
-          const total = (kd.lists ?? []).reduce((s, l) => s + (l.profile_count ?? 0), 0)
-          if (total > 0) setEmailSubs(total)
-        }
-        if (agentsRes.status === 'fulfilled' && Array.isArray(agentsRes.value)) {
-          setAgents((agentsRes.value as Agent[]).filter(a => a.active))
-        }
-
-        // Content ideas for strategy preview
-        try {
-          const ideasRes = await fetch('/api/marketing/content-ideas')
-          if (ideasRes.ok) {
-            const data = await ideasRes.json() as { ideas?: typeof contentIdeas }
-            if (Array.isArray(data.ideas) && data.ideas.length > 0) setContentIdeas(data.ideas.slice(0, 2))
-          }
-        } catch { /* non-fatal */ }
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
-
-  async function openTaskInDrawer(id: number) {
-    try {
-      const res = await fetch(`/api/tasks/${id}`)
-      if (res.ok) setDrawerTask(await res.json() as LibTask)
-    } catch { /* ignore */ }
+  async function load(showRefresh = false) {
+    if (showRefresh) setRefreshing(true)
+    const d = await fetch('/api/dashboard').then(r => r.json())
+    setData(d)
+    setLoading(false)
+    setRefreshing(false)
   }
 
-  async function openSubtaskInDrawer(id: number) {
-    try {
-      const res = await fetch(`/api/subtasks/${id}`)
-      if (res.ok) setDrawerSubtask(await res.json() as LibSubtask)
-    } catch { /* ignore */ }
-  }
-
-  // Morning brief — fetch cached; auto-generate if stale
-  useEffect(() => {
-    async function loadBrief() {
-      try {
-        const res = await fetch('/api/morning-brief')
-        if (!res.ok) return
-        const data = await res.json() as { brief: string | null; stale?: boolean; generatedAt?: string }
-        if (data.brief && !data.stale) {
-          setBrief(data.brief)
-          if (data.generatedAt) setBriefGeneratedAt(data.generatedAt)
-        } else {
-          setBriefLoading(true)
-          const gen = await fetch('/api/morning-brief', { method: 'POST' })
-          if (gen.ok) {
-            const gd = await gen.json() as { brief: string }
-            setBrief(gd.brief)
-            setBriefGeneratedAt(new Date().toISOString())
-          }
-          setBriefLoading(false)
-        }
-      } catch { setBriefLoading(false) }
-    }
-    loadBrief()
-  }, [])
-
-  const toggleTask = useCallback((id: number) => {
-    setCheckedTaskIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
-
-  // ── Derived data ──────────────────────────────────────────────────────────
-
-  const _7dCutoff = new Date(); _7dCutoff.setDate(_7dCutoff.getDate() + 7); _7dCutoff.setHours(23, 59, 59, 999)
-
-  const dailyTasks = tasks
-    .filter((t) => {
-      if (t.status === 'done') return false
-      if (!t.due_date) return false
-      return new Date(t.due_date + 'T00:00:00') <= _7dCutoff
-    })
-    .sort((a, b) => {
-      const da = new Date(a.due_date! + 'T00:00:00').getTime()
-      const db2 = new Date(b.due_date! + 'T00:00:00').getTime()
-      if (da !== db2) return da - db2
-      return (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9)
-    })
-
-  const activeProducts = inventory.filter((r) => r.status === 'active' && !r.is_bundle)
-
-  const lowStockItems = activeProducts
-    .filter((r) => r.shopify_qty <= r.reorder_threshold)
-    .slice(0, 5)
-
-  const criticalStockItems = activeProducts.filter((r) => r.shopify_qty < 2)
-
-  const activeProjectCount = projects.filter((p) => p.status !== 'completed' && p.status !== 'archived').length
-
-  const revenue30d = orders.reduce((s, o) => {
-    const d = new Date(o.created_at)
-    const ago30 = new Date()
-    ago30.setDate(ago30.getDate() - 30)
-    return d >= ago30 ? s + parseFloat(o.total_price) : s
-  }, 0)
-
-  const orders30d = orders.filter((o) => {
-    const d = new Date(o.created_at)
-    const ago30 = new Date()
-    ago30.setDate(ago30.getDate() - 30)
-    return d >= ago30
-  }).length
-
-  const bundleJarsMap = new Map<string, number>()
-  for (const c of bundleComponents) {
-    bundleJarsMap.set(c.bundle_shopify_id, (bundleJarsMap.get(c.bundle_shopify_id) ?? 0) + (c.quantity || 1))
-  }
-  const weeklyRevenue = buildWeeklyRevenue(orders, bundleJarsMap)
-
-  const today = new Date().toISOString().slice(0, 10)
-  const upcomingEvents = events
-    .filter((e) => e.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 4)
-
-  const audienceTotal = (igFollowers ?? 0) + (emailSubs ?? 0)
-  const audienceValue = audienceTotal > 0 ? fmtNum(audienceTotal) : (igFollowers !== null || emailSubs !== null ? fmtNum(audienceTotal) : '—')
-  const audienceSub = igEngRate !== null
-    ? `${igEngRate}% IG eng · ${emailSubs !== null ? fmtNum(emailSubs) + ' email' : 'no email data'}`
-    : igFollowers !== null ? `${fmtNum(igFollowers ?? 0)} followers` : 'Connect Instagram'
-
-  const kpis = [
-    {
-      label: 'Audience',
-      value: audienceValue,
-      sub: audienceSub,
-      subColor: audienceTotal > 0 ? '#C27A54' : '#A0A09A',
-    },
-    {
-      label: 'Revenue 30d',
-      value: revenue30d === 0 && orders.length === 0 ? '—' : fmt$(revenue30d),
-      sub: orders.length === 0 ? 'Sync Shopify to track' : `${orders30d} orders`,
-      subColor: orders.length === 0 ? '#A0A09A' : '#9BAE9A',
-    },
-    {
-      label: 'Orders 30d',
-      value: orders.length === 0 ? '—' : String(orders30d),
-      sub: orders.length === 0 ? 'No data yet' : 'paid orders',
-      subColor: orders.length === 0 ? '#A0A09A' : '#9BAE9A',
-    },
-    {
-      label: 'Active Projects',
-      value: String(activeProjectCount),
-      sub: `of ${projects.length} total`,
-      subColor: '#9BAE9A',
-    },
-    {
-      label: 'Low Stock Alerts',
-      value: String(lowStockItems.length),
-      sub: lowStockItems.length > 0 ? 'need reorder' : 'all stocked',
-      subColor: lowStockItems.length > 0 ? '#C14B3A' : '#9BAE9A',
-    },
-    {
-      label: 'Open Tasks',
-      value: String(tasks.filter(t => t.status !== 'done').length),
-      sub: `of ${tasks.length} total`,
-      subColor: '#C27A54',
-    },
-  ]
-
-  const marketingFocus = [
-    { color: '#9BAE9A', text: 'Post consistently — aim for 5 reels this week across both Instagram accounts.' },
-    { color: '#F0D77A', text: 'Email list hasn\'t had a campaign in 30+ days — consider a recipe or promo send.' },
-    { color: '#C27A54', text: 'Reorder inventory before it hits 0 — 26 products are below threshold.' },
-  ]
-
-  const socialStats = [
-    {
-      label: 'IG Followers',
-      value: igFollowers !== null ? fmtNum(igFollowers) : '—',
-      sub: igFollowers !== null ? (igEngRate !== null ? `${igEngRate}% eng rate` : 'Instagram') : 'Connect Instagram',
-      color: igFollowers !== null ? '#9BAE9A' : '#A0A09A',
-    },
-    {
-      label: 'Story Reach',
-      value: igStoryReach !== null ? fmtNum(igStoryReach) : '—',
-      sub: 'last 7 days',
-      color: igStoryReach !== null ? '#9BAE9A' : '#A0A09A',
-    },
-    { label: 'Posts This Mo.', value: String(events.filter((e) => e.published).length), sub: 'marked posted', color: '#9BAE9A' },
-    { label: 'Upcoming Posts', value: String(upcomingEvents.length), sub: 'on calendar', color: '#C27A54' },
-  ]
-
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  useEffect(() => { load() }, [])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full text-ink text-sm" style={{ fontFamily: "'Jost', sans-serif" }}>
-        Loading dashboard…
+      <div className="page-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 13, color: 'var(--wdp-ink-mid)' }}>
+          <Loader2 size={16} className="animate-spin" /> Loading dashboard…
+        </div>
       </div>
     )
   }
 
+  if (!data) return null
+  const { revenue, dailyRevenue, topProducts, customers, email, inventory, tasks } = data
+
+  // Daily revenue chart data (last 14 days, fill missing days)
+  const last14 = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (13 - i))
+    const day = d.toISOString().slice(0, 10)
+    const found = dailyRevenue.find(r => r.day === day)
+    return { day, label: shortDay(day), revenue: found?.revenue ?? 0, orders: found?.orders ?? 0 }
+  })
+
+  const topProdMax = Math.max(...topProducts.map(p => p.revenue), 1)
+
+  const custMonths = customers.byMonth.slice(-6)
+
   return (
-    <div
-      className="page-wrap"
-      style={{
-        maxWidth: 1160,
-        fontFamily: "'Jost', system-ui, sans-serif",
-      }}
-    >
-      <PageHeader
-        eyebrow={formatDate()}
-        title={greeting()}
-        subtitle="Everything running the business — inventory, revenue, projects, and what your agents caught while you weren't looking."
-      >
-        {criticalStockItems.length > 0 && (
-          <StatusRail
-            severity="critical"
-            message={`${criticalStockItems.length} product${criticalStockItems.length > 1 ? 's' : ''} out of stock`}
-            items={criticalStockItems.map(r => ({ label: r.title }))}
-            onViewAll={() => router.push('/inventory')}
-          />
-        )}
-      </PageHeader>
+    <div className="page-wrap" style={{ maxWidth: 1100, background: 'var(--wdp-ground, #FAF9F6)' }}>
 
-      {/* ── Morning Brief + KPI Row ── */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 28, alignItems: 'flex-start' }}>
-
-        {/* Morning Brief — 3/5 */}
-        {(brief || briefLoading) && (
-          <div ref={briefCardRef} style={{ flex: 3, minWidth: 0, overflow: 'hidden', background: 'rgba(155,174,154,0.28)', borderRadius: 12, padding: 22, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(44,44,44,0.55)', margin: 0 }}>
-                  Rose Mary · Morning Brief
-                </p>
-                {briefGeneratedAt && !briefLoading && (
-                  <p style={{ fontSize: 10, color: 'rgba(44,44,44,0.42)', margin: 0 }}>
-                    Generated {new Date((briefGeneratedAt.includes('T') ? briefGeneratedAt : briefGeneratedAt.replace(' ', 'T') + 'Z')).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                  </p>
-                )}
-              </div>
-              {!briefLoading && (
-                <button
-                  onClick={async () => {
-                    setBriefLoading(true)
-                    try {
-                      const r = await fetch('/api/morning-brief', { method: 'POST' })
-                      if (r.ok) { const d = await r.json() as { brief: string }; setBrief(d.brief); setBriefGeneratedAt(new Date().toISOString()) }
-                    } finally { setBriefLoading(false) }
-                  }}
-                  style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(44,44,44,0.45)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  Refresh ↺
-                </button>
-              )}
-            </div>
-            {briefLoading ? (
-              <p style={{ fontFamily: "'Jost', sans-serif", fontSize: 13.5, color: 'rgba(44,44,44,0.55)', margin: 0 }}>Rose Mary is reviewing the business…</p>
-            ) : (
-              <div
-                className="chat-prose"
-                style={{ fontSize: 13.5, overflowY: 'auto', flex: 1, minHeight: 0 }}
-                dangerouslySetInnerHTML={{ __html: marked.parse(brief ?? '') as string }}
-              />
-            )}
+      {/* ── Page header ────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 4 }}>
+            Weeknight Dinner Party
           </div>
-        )}
-
-        {/* KPI Cards — 2/5 when brief showing, full width otherwise */}
-        <div ref={kpiColRef} style={{ flex: (brief || briefLoading) ? 2 : 1, minWidth: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start' }}>
-          {kpis.map((k) => {
-            const isCriticalKpi = k.label === 'Low Stock Alerts' && lowStockItems.length > 0
-            return (
-              <div
-                key={k.label}
-                style={{
-                  background: '#fff',
-                  border: `1px solid ${isCriticalKpi ? '#C94040' : 'rgba(216,210,198,0.6)'}`,
-                  borderLeft: isCriticalKpi ? '3px solid #C94040' : '1px solid rgba(216,210,198,0.6)',
-                  borderRadius: 12,
-                  padding: '16px 16px 14px',
-                }}
-              >
-                <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.7)', margin: '0 0 6px' }}>
-                  {k.label}
-                </p>
-                <p style={{ fontFamily: "'Jost', sans-serif", fontSize: 22, fontWeight: 600, color: isCriticalKpi ? '#C94040' : '#2C2C2C', margin: '0 0 4px' }}>
-                  {k.value}
-                </p>
-                <p style={{ fontSize: 12, color: k.subColor, margin: 0, fontWeight: 600 }}>{k.sub}</p>
-              </div>
-            )
-          })}
+          <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: 'var(--wdp-ink)', margin: 0, letterSpacing: '-0.5px' }}>
+            Business Dashboard
+          </h1>
+          <div style={{ fontFamily: FONT, fontSize: 12, color: 'var(--wdp-ink-mid)', marginTop: 4 }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+          </div>
         </div>
-
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => load(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontFamily: FONT, fontSize: 12, fontWeight: 600, color: 'var(--wdp-ink-mid)',
+              background: 'var(--wdp-surface)', border: '1px solid var(--wdp-border)',
+              borderRadius: 8, padding: '7px 12px', cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+          <Link href="/chat" style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#000',
+            background: 'var(--wdp-neon, #D7FF10)', border: 'none',
+            borderRadius: 8, padding: '7px 14px', cursor: 'pointer', textDecoration: 'none',
+          }}>
+            <MessageCircle size={12} />
+            Ask Rose Mary
+          </Link>
+        </div>
       </div>
 
-      {/* ── Business Performance ── */}
-      <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '20px 22px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h3 style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2C2C2C', margin: 0 }}>
-            How the Business Is Doing
-          </h3>
-          <button onClick={() => router.push('/financials')} style={{ border: 'none', background: 'transparent', color: '#747474', fontSize: 12, fontFamily: "'Jost', sans-serif", cursor: 'pointer' }}>
-            Full financials →
-          </button>
-        </div>
-        <p style={{ fontSize: 13.5, color: '#2C2C2C', lineHeight: 1.6, margin: '0 0 16px', maxWidth: 760 }}>
-          {orders.length === 0
-            ? 'Shopify order data isn\'t syncing yet — connect your store to see real revenue, order volume, and per-product trends here.'
-            : `${orders30d} orders and ${fmt$(revenue30d)} in revenue over the last 30 days. ${lowStockItems.length} products are below reorder threshold.`}
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#747474' }}>
-            <span style={{ width: 8, height: 8, borderRadius: 999, background: '#9BAE9A', display: 'inline-block' }} />
-            Revenue
+      {/* ── Alert banner if issues ──────────────────────────────────────────── */}
+      {(inventory.negative_stock > 0 || tasks.overdue > 0) && (
+        <div style={{
+          background: 'rgba(193,75,58,0.07)', border: '1px solid rgba(193,75,58,0.22)',
+          borderRadius: 10, padding: '10px 16px', marginBottom: 20,
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <AlertCircle size={14} style={{ color: '#C14B3A', flexShrink: 0 }} strokeWidth={2} />
+          <span style={{ fontFamily: FONT, fontSize: 12.5, color: '#C14B3A', fontWeight: 600 }}>
+            {[
+              inventory.negative_stock > 0 && `${inventory.negative_stock} SKU with negative Shopify stock`,
+              tasks.overdue > 0 && `${tasks.overdue} overdue task${tasks.overdue > 1 ? 's' : ''}`,
+            ].filter(Boolean).join(' · ')}
           </span>
-          <span style={{ fontSize: 12, color: '#747474' }}>
-            {orders.length === 0 ? 'No orders to display' : `${orders.length} total orders this period`}
-          </span>
+          <Link href="/chat" style={{ marginLeft: 'auto', fontFamily: FONT, fontSize: 11.5, fontWeight: 700, color: '#C14B3A', textDecoration: 'none' }}>
+            Ask Rose Mary →
+          </Link>
         </div>
-        <RevenueChart weeks={weeklyRevenue} />
-        <p style={{ fontSize: 10.5, color: 'rgba(116,116,116,0.55)', margin: '8px 0 0' }}>
-          Revenue by week · *week-to-date · hover a point for details
-        </p>
+      )}
+
+      {/* ── KPI tiles ──────────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 28 }}>
+        <KPITile
+          label="Revenue · 30 days"
+          value={fmtFull$(revenue.last30d)}
+          sub={`${revenue.orders30d} orders · ${fmtFull$(revenue.aov)} AOV`}
+          icon={TrendingUp}
+          iconColor="#2A7A52"
+          iconBg="rgba(128,230,166,0.18)"
+          delta={revenue.weekChange}
+        />
+        <KPITile
+          label="This Week"
+          value={fmtFull$(revenue.thisWeek)}
+          sub={`${revenue.ordersThisWeek} order${revenue.ordersThisWeek !== 1 ? 's' : ''}`}
+          icon={ShoppingBag}
+          iconColor="#4A7C8A"
+          iconBg="rgba(120,183,197,0.18)"
+          delta={revenue.weekChange}
+        />
+        <KPITile
+          label="Email List"
+          value={email.totalSubscribers.toString()}
+          sub={`${email.lists.find(l => l.name.toLowerCase().includes('email'))?.profile_count ?? 0} email · ${email.lists.find(l => l.name.toLowerCase().includes('text'))?.profile_count ?? 0} SMS`}
+          icon={Mail}
+          iconColor="#78B7C5"
+          iconBg="rgba(120,183,197,0.18)"
+        />
+        <KPITile
+          label="Customers"
+          value={customers.total.toString()}
+          sub={`${customers.repeatBuyers} repeat buyers`}
+          icon={Users}
+          iconColor="#C27A54"
+          iconBg="rgba(194,122,84,0.12)"
+        />
+        <KPITile
+          label="Active SKUs"
+          value={inventory.active_skus.toString()}
+          sub={`${inventory.draft_skus} in draft · ${inventory.healthy} healthy`}
+          icon={Package}
+          iconColor={inventory.negative_stock > 0 ? '#C14B3A' : '#747474'}
+          iconBg={inventory.negative_stock > 0 ? 'rgba(193,75,58,0.10)' : 'rgba(120,120,120,0.12)'}
+          alert={inventory.negative_stock > 0}
+        />
+        <KPITile
+          label="Tasks"
+          value={tasks.total.toString()}
+          sub={`${tasks.done} done · ${tasks.overdue} overdue · ${tasks.urgent} urgent`}
+          icon={ClipboardList}
+          iconColor={tasks.overdue > 0 ? '#C27A54' : '#747474'}
+          iconBg={tasks.overdue > 0 ? 'rgba(194,122,84,0.12)' : 'rgba(120,120,120,0.12)'}
+          alert={tasks.overdue > 2}
+        />
       </div>
 
-      {/* ── Marketing & Social Insights ── */}
-      <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '20px 22px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h3 style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2C2C2C', margin: 0 }}>
-            Marketing &amp; Social Insights
-          </h3>
-          <button onClick={() => router.push('/marketing')} style={{ border: 'none', background: 'transparent', color: '#747474', fontSize: 12, fontFamily: "'Jost', sans-serif", cursor: 'pointer' }}>
-            Full marketing →
-          </button>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 14, marginBottom: 14 }}>
-          {socialStats.map((ss) => (
-            <div key={ss.label}>
-              <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.65)', margin: '0 0 5px' }}>
-                {ss.label}
-              </p>
-              <p style={{ fontSize: 19, fontWeight: 600, color: '#2C2C2C', margin: '0 0 3px' }}>{ss.value}</p>
-              <p style={{ fontSize: 11, fontWeight: 600, color: ss.color, margin: 0 }}>{ss.sub}</p>
+      {/* ── Two-column grid ─────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+        {/* Revenue sparkline */}
+        <Card>
+          <SectionHead title="Daily Revenue" />
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: 'var(--wdp-ink)', letterSpacing: '-0.4px', fontVariantNumeric: 'tabular-nums' }}>
+              {fmtFull$(revenue.last30d)}
+            </span>
+            <span style={{ fontFamily: FONT, fontSize: 11, color: 'var(--wdp-ink-mid)', marginLeft: 8 }}>last 30 days</span>
+          </div>
+          <BarChart
+            data={last14}
+            valueKey="revenue"
+            labelKey="label"
+            color="var(--wdp-neon, #D7FF10)"
+            height={72}
+          />
+          {last14.every(d => d.revenue === 0) && (
+            <div style={{ fontFamily: FONT, fontSize: 11, color: 'var(--wdp-ink-dim)', textAlign: 'center', marginTop: 8 }}>
+              No sales data in the last 14 days
             </div>
-          ))}
-        </div>
-        <div style={{ borderTop: '1px solid rgba(216,210,198,0.4)', paddingTop: 12 }}>
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 8px' }}>
-            Where to focus
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {marketingFocus.map((mf, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, flexShrink: 0, background: mf.color, display: 'inline-block' }} />
-                <p style={{ fontSize: 12.5, color: '#2C2C2C', margin: 0, flex: 1 }}>{mf.text}</p>
+          )}
+        </Card>
+
+        {/* Customer growth */}
+        <Card>
+          <SectionHead title="Customer Growth" />
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: 'var(--wdp-ink)', letterSpacing: '-0.4px' }}>
+              {customers.total}
+            </span>
+            <span style={{ fontFamily: FONT, fontSize: 11, color: 'var(--wdp-ink-mid)', marginLeft: 8 }}>total customers</span>
+          </div>
+          <BarChart
+            data={custMonths.map(m => ({ ...m, label: shortMonth(m.month), value: m.new_customers }))}
+            valueKey="value"
+            labelKey="label"
+            color="#C27A54"
+            height={72}
+          />
+          <div style={{ fontFamily: FONT, fontSize: 11, color: 'var(--wdp-ink-mid)', marginTop: 8 }}>
+            {custMonths.length > 1 && (() => {
+              const last = custMonths[custMonths.length - 1]
+              const prev = custMonths[custMonths.length - 2]
+              const delta = last.new_customers - prev.new_customers
+              return delta >= 0
+                ? `↑ ${delta} more new customers than ${shortMonth(prev.month)}`
+                : `↓ ${Math.abs(delta)} fewer new customers than ${shortMonth(prev.month)}`
+            })()}
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Top products + Email ─────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+        {/* Top products */}
+        <Card>
+          <SectionHead title="Top Products" action="View inventory →" onAction={() => window.location.href = '/inventory'} />
+          {topProducts.length > 0 ? (
+            <HBarChart
+              data={topProducts.slice(0, 6).map(p => ({ label: p.product, value: p.revenue }))}
+              max={topProdMax}
+            />
+          ) : (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: 'var(--wdp-ink-dim)', textAlign: 'center', padding: '24px 0' }}>
+              No sales data yet
+            </div>
+          )}
+        </Card>
+
+        {/* Email performance */}
+        <Card>
+          <SectionHead title="Email" action="View campaigns →" onAction={() => window.location.href = '/email'} />
+          <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
+            {email.lists.map(l => (
+              <div key={l.name} style={{ flex: 1 }}>
+                <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: 'var(--wdp-ink)', letterSpacing: '-0.4px' }}>
+                  {l.profile_count}
+                </div>
+                <div style={{ fontFamily: FONT, fontSize: 10.5, color: 'var(--wdp-ink-mid)', marginTop: 2 }}>{l.name}</div>
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* ── Two-column grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 16, alignItems: 'start' }}>
-
-        {/* ── Left column ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Daily Tasks */}
-          <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '20px 22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h3 style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2C2C2C', margin: 0 }}>
-                  Daily Tasks
-                </h3>
-                <span style={{ fontSize: 11, color: 'rgba(116,116,116,0.6)' }}>Today&apos;s focus</span>
+          {email.recentCampaigns.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 2 }}>
+                Recent Campaigns
               </div>
-              {(() => {
-                const allDailyItems = [
-                  ...dailyTasks.map(t => ({ kind: 'task' as const, id: t.id, title: t.title, due_date: t.due_date!, priority: t.priority, project_name: t.project_name ?? '', status: t.status })),
-                  ...dueSubtasks.map(s => ({ kind: 'subtask' as const, id: s.id, title: s.title, due_date: s.due_date!, task_id: s.task_id, task_title: s.task_title, project_name: s.project_name ?? null, completed: s.completed })),
-                ].sort((a, b) => new Date(a.due_date + 'T00:00:00').getTime() - new Date(b.due_date + 'T00:00:00').getTime())
-                return (
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#747474' }}>
-                    {checkedTaskIds.size + checkedSubtaskIds.size} of {allDailyItems.length} done
-                  </span>
-                )
-              })()}
-            </div>
-            <p style={{ fontSize: 12, color: 'rgba(116,116,116,0.7)', margin: '0 0 14px' }}>
-              Tasks and subtasks due in the next 7 days.
-            </p>
-            {(() => {
-              const allDailyItems = [
-                ...dailyTasks.map(t => ({ kind: 'task' as const, id: t.id, title: t.title, due_date: t.due_date!, priority: t.priority, project_name: t.project_name ?? '', status: t.status })),
-                ...dueSubtasks.map(s => ({ kind: 'subtask' as const, id: s.id, title: s.title, due_date: s.due_date!, task_id: s.task_id, task_title: s.task_title, project_name: s.project_name ?? null, completed: s.completed })),
-              ].sort((a, b) => new Date(a.due_date + 'T00:00:00').getTime() - new Date(b.due_date + 'T00:00:00').getTime())
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {allDailyItems.length === 0 && (
-                    <p style={{ fontSize: 13, color: '#747474', padding: '12px 0' }}>All tasks are done. Nice work.</p>
-                  )}
-                  {allDailyItems.map((item, i) => {
-                    if (item.kind === 'task') {
-                      const done = checkedTaskIds.has(item.id)
-                      const pc = PRIORITY_COLORS[item.priority] ?? PRIORITY_COLORS.low
-                      return (
-                        <div
-                          key={`task-${item.id}`}
-                          style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid rgba(216,210,198,0.4)', cursor: 'pointer' }}
-                          onClick={() => openTaskInDrawer(item.id)}
-                        >
-                          <button
-                            onClick={e => { e.stopPropagation(); toggleTask(item.id) }}
-                            style={{
-                              width: 18, height: 18, borderRadius: 5, border: done ? 'none' : '1.5px solid #D8D2C6',
-                              background: done ? '#9BAE9A' : 'transparent', flexShrink: 0, marginTop: 2,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                            }}
-                          >
-                            {done && (
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                            )}
-                          </button>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13.5, fontWeight: 500, color: done ? '#A0A09A' : '#2C2C2C', margin: 0, textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {item.title}
-                            </p>
-                            <p style={{ fontSize: 11.5, color: '#747474', margin: '2px 0 0' }}>
-                              {item.project_name}
-                              {item.due_date && (
-                                <span> · due {new Date(item.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                              )}
-                            </p>
-                          </div>
-                          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 999, background: pc.bg, color: pc.text, flexShrink: 0, marginTop: 1 }}>
-                            {item.priority}
-                          </span>
-                        </div>
-                      )
-                    } else {
-                      const done = checkedSubtaskIds.has(item.id)
-                      return (
-                        <div
-                          key={`sub-${item.id}`}
-                          style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid rgba(216,210,198,0.4)', cursor: 'pointer' }}
-                          onClick={() => openSubtaskInDrawer(item.id)}
-                        >
-                          <button
-                            onClick={e => {
-                              e.stopPropagation()
-                              setCheckedSubtaskIds(prev => {
-                                const next = new Set(prev)
-                                if (next.has(item.id)) next.delete(item.id); else next.add(item.id)
-                                return next
-                              })
-                            }}
-                            style={{
-                              width: 18, height: 18, borderRadius: 5, border: done ? 'none' : '1.5px solid #D8D2C6',
-                              background: done ? '#9BAE9A' : 'transparent', flexShrink: 0, marginTop: 2,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                            }}
-                          >
-                            {done && (
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                            )}
-                          </button>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13.5, fontWeight: 500, color: done ? '#A0A09A' : '#2C2C2C', margin: 0, textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              <span style={{ color: '#C8C2B8', marginRight: 4, fontWeight: 400 }}>↳</span>{item.title}
-                            </p>
-                            <p style={{ fontSize: 11.5, color: '#747474', margin: '2px 0 0' }}>
-                              {item.task_title}{item.project_name ? ` · ${item.project_name}` : ''}
-                              {item.due_date && (
-                                <span> · due {new Date(item.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                      )
-                    }
-                  })}
-                </div>
-              )
-            })()}
-            <button
-              onClick={() => router.push('/projects')}
-              style={{ marginTop: 12, width: '100%', padding: 9, borderRadius: 8, border: '1px solid #D8D2C6', background: 'transparent', color: '#2C2C2C', fontSize: 12.5, fontWeight: 600, fontFamily: "'Jost', sans-serif", cursor: 'pointer' }}
-            >
-              View all tasks →
-            </button>
-          </div>
-
-          {/* Needs Attention */}
-          <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '20px 22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <h3 style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2C2C2C', margin: 0 }}>
-                Needs Attention
-              </h3>
-              <span style={{ fontSize: 11, color: 'rgba(116,116,116,0.6)' }}>{lowStockItems.length} items</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {lowStockItems.length === 0 && (
-                <p style={{ fontSize: 13, color: '#747474', padding: '12px 0' }}>Nothing flagged right now.</p>
-              )}
-              {lowStockItems.map((item, i) => (
-                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid rgba(216,210,198,0.4)' }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: '#C14B3A', display: 'inline-block' }} />
+              {email.recentCampaigns.slice(0, 3).map((c, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 0', borderBottom: i < 2 ? '1px solid var(--wdp-border)' : 'none',
+                }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13.5, fontWeight: 500, color: '#2C2C2C', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.title}
-                    </p>
-                    <p style={{ fontSize: 11.5, color: '#747474', margin: '2px 0 0' }}>
-                      {item.shopify_qty} in stock · threshold {item.reorder_threshold}
-                    </p>
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 999, background: 'rgba(193,75,58,0.1)', color: '#C14B3A', flexShrink: 0 }}>
-                    Low
-                  </span>
-                  <button
-                    onClick={() => router.push('/inventory')}
-                    style={{ fontSize: 11.5, fontWeight: 600, fontFamily: "'Jost', sans-serif", color: '#2C2C2C', background: 'transparent', border: '1px solid #D8D2C6', borderRadius: 7, padding: '5px 11px', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    Reorder
-                  </button>
-                </div>
-              ))}
-            </div>
-            {lowStockItems.length < inventory.filter(r => r.shopify_qty <= r.reorder_threshold).length && (
-              <button
-                onClick={() => router.push('/inventory')}
-                style={{ marginTop: 12, width: '100%', padding: 9, borderRadius: 8, border: '1px solid #D8D2C6', background: 'transparent', color: '#2C2C2C', fontSize: 12.5, fontWeight: 600, fontFamily: "'Jost', sans-serif", cursor: 'pointer' }}
-              >
-                View all low-stock items →
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Right column ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Content Strategy Preview */}
-          <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '20px 22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <h3 style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2C2C2C', margin: 0 }}>
-                Content Ideas
-              </h3>
-              <button
-                onClick={() => router.push('/marketing')}
-                style={{ border: 'none', background: 'transparent', color: '#747474', fontSize: 12, fontFamily: "'Jost', sans-serif", cursor: 'pointer' }}
-              >
-                See all →
-              </button>
-            </div>
-            {contentIdeas.length === 0 ? (
-              <p style={{ fontSize: 13, color: '#747474', padding: '4px 0 8px' }}>No ideas generated yet — go to Marketing to create some.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {contentIdeas.map((idea) => {
-                  const FORMAT_COLORS: Record<string, string> = { Reel: '#78B7C5', Carousel: '#C27A54', Post: '#9BAE9A', Story: '#DFC97B' }
-                  const fmtColor = FORMAT_COLORS[idea.format] ?? '#9BAE9A'
-                  return (
-                    <div
-                      key={idea.id}
-                      style={{ borderRadius: 10, border: '1px solid rgba(216,210,198,0.6)', overflow: 'hidden', background: '#FAFAF7' }}
-                    >
-                      <div style={{ padding: '12px 14px 10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-                          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999, background: `${fmtColor}22`, color: fmtColor }}>
-                            {idea.format}
-                          </span>
-                        </div>
-                        <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 16, fontWeight: 600, color: '#2C2C2C', margin: '0 0 5px', lineHeight: 1.25 }}>
-                          {idea.title}
-                        </p>
-                        <p style={{ fontSize: 11.5, color: '#747474', margin: 0, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {idea.hook}
-                        </p>
-                      </div>
-                      <div style={{ padding: '7px 14px 8px', backgroundColor: 'rgba(122,158,126,0.1)', borderTop: '0.5px solid rgba(90,130,90,0.25)' }}>
-                        <p style={{ fontSize: 11, color: '#4a6e49', margin: 0, lineHeight: 1.35 }}>{idea.why}</p>
-                      </div>
+                    <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 500, color: 'var(--wdp-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {c.name || '(Untitled)'}
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Tonight's take */}
-          <div style={{ background: '#2C2C2C', borderRadius: 12, padding: 22 }}>
-            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(250,249,246,0.5)', margin: '0 0 8px' }}>
-              Tonight&apos;s take
-            </p>
-            <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 600, fontSize: 22, color: '#FAF9F6', margin: 0, lineHeight: 1.3 }}>
-              Dinner doesn&apos;t need to be complicated to be good — neither does running the business behind it.
-            </p>
-          </div>
-
-          {/* Agents & Automations */}
-          <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '20px 22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h3 style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2C2C2C', margin: 0 }}>
-                  Agents &amp; Automations
-                </h3>
-                <span style={{ fontSize: 11, color: 'rgba(116,116,116,0.6)' }}>{agents.length} active</span>
-              </div>
-              <button
-                onClick={() => router.push('/settings')}
-                style={{ border: 'none', background: 'transparent', color: '#747474', fontSize: 12, fontFamily: "'Jost', sans-serif", cursor: 'pointer' }}
-              >
-                Manage →
-              </button>
+                    <div style={{ fontFamily: FONT, fontSize: 10.5, color: 'var(--wdp-ink-mid)', marginTop: 1 }}>
+                      {new Date(c.send_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, flexShrink: 0, marginLeft: 8 }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: 'var(--wdp-ink)', fontVariantNumeric: 'tabular-nums' }}>
+                        {c.unique_opens ?? 0}
+                      </div>
+                      <div style={{ fontFamily: FONT, fontSize: 9.5, color: 'var(--wdp-ink-dim)' }}>opens</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: 'var(--wdp-ink)', fontVariantNumeric: 'tabular-nums' }}>
+                        {c.unique_clicks ?? 0}
+                      </div>
+                      <div style={{ fontFamily: FONT, fontSize: 9.5, color: 'var(--wdp-ink-dim)' }}>clicks</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
+          ) : (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: 'var(--wdp-ink-dim)', textAlign: 'center', padding: '12px 0' }}>
+              No campaigns sent yet
+            </div>
+          )}
+        </Card>
+      </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {agents.map((ag, i) => (
-                <div
-                  key={ag.id}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', borderRadius: 9,
-                    background: i === 0 ? 'rgba(194,122,84,0.07)' : '#FAFAF7',
-                    border: i === 0 ? '1px solid rgba(194,122,84,0.22)' : '1px solid rgba(216,210,198,0.5)',
-                  }}
-                >
-                  <div style={{
-                    width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                    background: i === 0 ? 'rgba(194,122,84,0.18)' : '#F2EDE5',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+      {/* ── GA4 placeholder + Inventory ──────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+        {/* GA4 placeholder */}
+        <Card style={{ position: 'relative', overflow: 'hidden' }}>
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(216,210,198,0.08) 10px, rgba(216,210,198,0.08) 11px)',
+          }} />
+          <div style={{ position: 'relative' }}>
+            <SectionHead title="Website Analytics" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {['Sessions', 'Bounce Rate', 'Avg. Time on Page', 'Top Countries'].map(metric => (
+                <div key={metric} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: FONT, fontSize: 12.5, color: 'var(--wdp-ink-mid)' }}>{metric}</span>
+                  <span style={{
+                    fontFamily: FONT, fontSize: 11, color: 'var(--wdp-ink-dim)',
+                    background: 'var(--wdp-border)', borderRadius: 4, padding: '3px 8px',
                   }}>
-                    {i === 0 ? (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C27A54" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                      </svg>
-                    ) : (
-                      <div style={{ width: 6, height: 6, borderRadius: 999, background: '#A0C66D' }} />
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13.5, fontWeight: i === 0 ? 700 : 600, color: '#2C2C2C', margin: 0 }}>{ag.name}</p>
-                    {ag.description && (
-                      <p style={{ fontSize: 11.5, color: i === 0 ? '#a35a37' : '#747474', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {ag.description}
-                      </p>
-                    )}
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '3px 9px', borderRadius: 999, background: '#E8F3E8', color: '#3A7A3A', flexShrink: 0 }}>
-                    Active
+                    —
                   </span>
                 </div>
               ))}
-              {agents.length === 0 && (
-                <p style={{ fontSize: 13, color: '#747474', padding: '8px 0' }}>No agents configured yet.</p>
-              )}
+              <Link href="/settings" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                fontFamily: FONT, fontSize: 11.5, fontWeight: 700,
+                color: 'var(--wdp-ink)', textDecoration: 'none',
+                background: 'var(--wdp-neon, #D7FF10)', borderRadius: 7, padding: '7px 14px',
+                marginTop: 4, alignSelf: 'flex-start',
+              }}>
+                <ArrowUpRight size={12} />
+                Connect Google Analytics
+              </Link>
             </div>
           </div>
-        </div>
+        </Card>
+
+        {/* Inventory health */}
+        <Card>
+          <SectionHead title="Inventory Health" action="View all →" onAction={() => window.location.href = '/inventory'} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            {[
+              { label: 'Healthy', value: inventory.healthy, color: '#2A7A52', bg: 'rgba(128,230,166,0.15)' },
+              { label: 'Critical (≤5)', value: inventory.critical_low, color: '#C27A54', bg: 'rgba(194,122,84,0.12)' },
+              { label: 'Oversell', value: inventory.negative_stock, color: '#C14B3A', bg: 'rgba(193,75,58,0.10)' },
+              { label: 'Draft', value: inventory.draft_skus, color: '#747474', bg: 'rgba(120,120,120,0.12)' },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: s.bg, borderRadius: 9, padding: '10px 12px',
+              }}>
+                <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 800, color: s.color, fontVariantNumeric: 'tabular-nums' }}>
+                  {s.value}
+                </div>
+                <div style={{ fontFamily: FONT, fontSize: 10.5, color: s.color, marginTop: 2, opacity: 0.8 }}>
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+          {inventory.negative_stock > 0 && (
+            <div style={{
+              background: 'rgba(193,75,58,0.08)', border: '1px solid rgba(193,75,58,0.2)',
+              borderRadius: 8, padding: '9px 12px',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <AlertCircle size={13} style={{ color: '#C14B3A', flexShrink: 0 }} strokeWidth={2} />
+              <span style={{ fontFamily: FONT, fontSize: 11.5, color: '#C14B3A' }}>
+                {inventory.negative_stock} SKU with negative stock — sync with Shopify or recount
+              </span>
+            </div>
+          )}
+        </Card>
       </div>
 
-      <TaskDetailDrawer
-        task={drawerTask}
-        onClose={() => setDrawerTask(null)}
-        onUpdate={(updated) => setDrawerTask(updated)}
-        onDelete={async (id) => {
-          await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-          setTasks(prev => prev.filter(t => t.id !== id))
-          setDrawerTask(null)
-        }}
-        onOpenSubtask={(s) => { setDrawerTask(null); setDrawerSubtask(s) }}
-      />
-
-      <SubtaskDetailDrawer
-        subtask={drawerSubtask}
-        onClose={() => setDrawerSubtask(null)}
-        onUpdate={(updated) => setDrawerSubtask(updated)}
-        onDelete={async (id) => {
-          await fetch(`/api/subtasks/${id}`, { method: 'DELETE' })
-          setDueSubtasks(prev => prev.filter(s => s.id !== id))
-          setDrawerSubtask(null)
-        }}
-        onOpenParentTask={(taskId) => { setDrawerSubtask(null); openTaskInDrawer(taskId) }}
-      />
+      {/* ── All-time stats footer ─────────────────────────────────────────────── */}
+      <div style={{
+        background: 'var(--wdp-surface)', border: '1px solid var(--wdp-border)',
+        borderRadius: 12, padding: '16px 20px',
+        display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center',
+      }}>
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 4 }}>
+            All-Time Revenue
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 22, fontWeight: 800, color: 'var(--wdp-ink)', letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums' }}>
+            {fmtFull$(revenue.allTime)}
+          </div>
+        </div>
+        <div style={{ width: 1, height: 40, background: 'var(--wdp-border)', flexShrink: 0 }} />
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 4 }}>
+            Total Orders
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 22, fontWeight: 800, color: 'var(--wdp-ink)', letterSpacing: '-0.5px' }}>
+            {revenue.allTimeOrders}
+          </div>
+        </div>
+        <div style={{ width: 1, height: 40, background: 'var(--wdp-border)', flexShrink: 0 }} />
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 4 }}>
+            Email + SMS
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 22, fontWeight: 800, color: 'var(--wdp-ink)', letterSpacing: '-0.5px' }}>
+            {email.totalSubscribers}
+          </div>
+        </div>
+        <div style={{ width: 1, height: 40, background: 'var(--wdp-border)', flexShrink: 0 }} />
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 4 }}>
+            Brand Age
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 22, fontWeight: 800, color: 'var(--wdp-ink)', letterSpacing: '-0.5px' }}>
+            {(() => {
+              const launch = new Date('2026-04-01')
+              const now = new Date()
+              const months = Math.floor((now.getTime() - launch.getTime()) / (1000 * 60 * 60 * 24 * 30))
+              return `${months}mo`
+            })()}
+          </div>
+        </div>
+        <div style={{ marginLeft: 'auto' }}>
+          <Link href="/chat" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#000',
+            background: 'var(--wdp-neon, #D7FF10)', borderRadius: 8, padding: '8px 16px',
+            textDecoration: 'none',
+          }}>
+            <Star size={12} />
+            Ask Rose Mary to analyze this
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }

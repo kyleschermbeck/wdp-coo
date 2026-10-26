@@ -100,6 +100,49 @@ function GanttRow({ project, onClick }: { project: Project; onClick: () => void 
   )
 }
 
+// ─── GroupCreator ─────────────────────────────────────────────────────────────
+
+function GroupCreator({ onAdd }: { onAdd: (name: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function commit() {
+    const trimmed = name.trim()
+    if (trimmed) { onAdd(trimmed); setName('') }
+    setEditing(false)
+  }
+
+  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: '#747474', fontSize: 12, ...FONT, opacity: 0.6 }}
+      >
+        <Plus size={12} /> New Group
+      </button>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        ref={inputRef}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setEditing(false); setName('') } }}
+        placeholder="Group name…"
+        style={{ flex: 1, ...FONT, fontSize: 12.5, border: '1px solid #D8D2C6', borderRadius: 7, padding: '6px 10px', outline: 'none', background: '#FAFAF8', color: '#2C2C2C' }}
+      />
+      <button onClick={commit} style={{ ...FONT, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 7, border: 'none', background: name.trim() ? '#2C2C2C' : '#D8D2C6', color: '#FAF9F6', cursor: name.trim() ? 'pointer' : 'default' }}>
+        Create
+      </button>
+      <button onClick={() => { setEditing(false); setName('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#747474', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
+    </div>
+  )
+}
+
 // ─── ProjectAccordion ─────────────────────────────────────────────────────────
 
 function ProjectAccordion({
@@ -189,104 +232,117 @@ function ProjectAccordion({
             <p style={{ fontSize: 12.5, color: '#747474', padding: '10px 0', margin: 0, ...FONT }}>
               {tasks.length === 0 ? 'No tasks yet.' : 'All done! 🎉'}
             </p>
-          ) : sortedTasks.flatMap((t, i) => {
-            const isDone = t.status === 'done'
-            const dueInfo = t.due_date ? (() => {
-              const parsed = parseISO(t.due_date)
-              return { text: format(parsed, 'MMM d'), overdue: isPast(parsed) && !isToday(parsed) && !isDone, today: isToday(parsed) }
-            })() : null
-            const ss = STATUS_STYLE[t.status] ?? STATUS_STYLE.todo
-            const ps2 = PRIORITY_STYLE[t.priority] ?? PRIORITY_STYLE.low
-
-            // All subtasks for this task (for count badge)
-            const allTaskSubs = subtasks.filter(s => s.task_id === t.id)
-            const totalSubs = allTaskSubs.length
-            const doneSubs = allTaskSubs.filter(s => s.completed).length
-
-            // Visible subtasks (respects hideDone)
-            const taskSubs = allTaskSubs.filter(s => hideDone ? !s.completed : true)
-            const hasSubtasks = totalSubs > 0
-
-            // Default collapsed — expandedTaskIds tracks which are OPEN
-            const isExpanded = hasSubtasks ? expandedTaskIds.has(t.id) : true
-
-            const isLast = i === sortedTasks.length - 1 && (!hasSubtasks || !isExpanded || taskSubs.length === 0)
-
-            const taskRow = (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: isLast ? 'none' : '1px solid rgba(216,210,198,0.35)', opacity: isDone ? 0.55 : 1 }}>
-                <div
-                  onClick={() => onUpdateTask(t.id, { status: isDone ? 'todo' : 'done' })}
-                  style={{ width: 15, height: 15, borderRadius: 3, flexShrink: 0, cursor: 'pointer', border: `1.5px solid ${isDone ? '#2C2C2C' : '#D8D2C6'}`, background: isDone ? '#2C2C2C' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s' }}
-                >
-                  {isDone && <Check style={{ width: 9, height: 9, color: '#FAF9F6', strokeWidth: 3 }} />}
-                </div>
-                {hasSubtasks && (
-                  <button
-                    onClick={e => { e.stopPropagation(); toggleTaskExpanded(t.id) }}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#9BA69A', fontSize: 9, flexShrink: 0, display: 'flex', alignItems: 'center', transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
-                    title={isExpanded ? 'Collapse subtasks' : 'Expand subtasks'}
-                  >▶</button>
-                )}
-                <span onClick={() => onOpenTask(t)} style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#2C2C2C', ...FONT, cursor: 'pointer', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: isDone ? 'line-through' : 'none' }}>
-                  {t.title}
-                </span>
-                {hasSubtasks && (
-                  <span style={{ ...FONT, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99, flexShrink: 0, background: doneSubs === totalSubs ? 'rgba(120,183,197,0.15)' : 'rgba(44,44,44,0.06)', color: doneSubs === totalSubs ? '#3d7684' : '#747474', border: `1px solid ${doneSubs === totalSubs ? 'rgba(120,183,197,0.3)' : 'rgba(44,44,44,0.12)'}` }}>
-                    {doneSubs}/{totalSubs}
-                  </span>
-                )}
-                <span style={{ ...PILL_BASE, background: ps2.bg, color: ps2.color, flexShrink: 0 }}>{t.priority}</span>
-                <select value={t.status} onChange={e => { e.stopPropagation(); onUpdateTask(t.id, { status: e.target.value as Task['status'] }) }} onClick={e => e.stopPropagation()}
-                  style={{ ...FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '3px 6px', borderRadius: 6, border: `1px solid ${ss.color}50`, background: ss.bg, color: ss.color, outline: 'none', cursor: 'pointer', flexShrink: 0 }}>
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="review">Review</option>
-                  <option value="done">Done</option>
-                </select>
-                {dueInfo && (
-                  <span style={{ fontSize: 11, flexShrink: 0, ...FONT, color: dueInfo.overdue ? '#C14B3A' : dueInfo.today ? '#C27A54' : '#747474', fontWeight: (dueInfo.overdue || dueInfo.today) ? 600 : 400 }}>
-                    {dueInfo.text}
-                  </span>
-                )}
-              </div>
-            )
-
-            const subtaskRows = (hasSubtasks && isExpanded) ? taskSubs.map((s, si) => {
-              const subDone = !!s.completed
-              const isLastSub = i === sortedTasks.length - 1 && si === taskSubs.length - 1
-              const subDueDate = s.due_date
-              const subOverdue = subDueDate && !subDone && new Date(subDueDate + 'T00:00:00') < new Date(new Date().toDateString())
-              return (
-                <div key={`sub-${s.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', paddingLeft: 18, borderBottom: isLastSub ? 'none' : '1px solid rgba(216,210,198,0.25)', opacity: subDone ? 0.45 : 1 }}>
-                  <span style={{ color: 'rgba(216,210,198,0.9)', fontSize: 10, flexShrink: 0, marginLeft: -10, marginRight: -2 }}>└</span>
-                  <div
-                    onClick={() => onToggleSubtask(s)}
-                    style={{ width: 13, height: 13, borderRadius: 3, flexShrink: 0, cursor: 'pointer', border: `1.5px solid ${subDone ? '#2C2C2C' : '#D8D2C6'}`, background: subDone ? '#2C2C2C' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s' }}
-                  >
-                    {subDone && <Check style={{ width: 8, height: 8, color: '#FAF9F6', strokeWidth: 3 }} />}
-                  </div>
-                  <span
-                    onClick={() => onOpenSubtask(s)}
-                    style={{ flex: 1, fontSize: 12, fontWeight: 400, color: '#2C2C2C', ...FONT, cursor: 'pointer', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: subDone ? 'line-through' : 'none' }}
-                  >
-                    {s.title}
-                  </span>
-                  <label style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }} title={subDueDate ? 'Change due date' : 'Set due date'}>
-                    <Calendar style={{ width: 11, height: 11, color: subOverdue ? '#C14B3A' : subDueDate ? '#9BA69A' : 'rgba(44,44,44,0.2)' }} />
-                    {subDueDate && (
-                      <span style={{ fontSize: 10, fontWeight: 600, color: subOverdue ? '#C14B3A' : '#747474', ...FONT }}>
-                        {format(parseISO(subDueDate), 'MMM d')}
+          ) : (() => {
+            // Shared per-task row renderer (used for both flat and grouped paths)
+            function renderRows(list: Task[]) {
+              return list.flatMap((t, i) => {
+                const isDone = t.status === 'done'
+                const dueInfo = t.due_date ? (() => {
+                  const parsed = parseISO(t.due_date)
+                  return { text: format(parsed, 'MMM d'), overdue: isPast(parsed) && !isToday(parsed) && !isDone, today: isToday(parsed) }
+                })() : null
+                const ss = STATUS_STYLE[t.status] ?? STATUS_STYLE.todo
+                const ps2 = PRIORITY_STYLE[t.priority] ?? PRIORITY_STYLE.low
+                const allTaskSubs = subtasks.filter(s => s.task_id === t.id)
+                const totalSubs = allTaskSubs.length
+                const doneSubs = allTaskSubs.filter(s => s.completed).length
+                const taskSubs = allTaskSubs.filter(s => hideDone ? !s.completed : true)
+                const hasSubtasks = totalSubs > 0
+                const isExpanded = hasSubtasks ? expandedTaskIds.has(t.id) : true
+                const isLast = i === list.length - 1 && (!hasSubtasks || !isExpanded || taskSubs.length === 0)
+                const taskRow = (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: isLast ? 'none' : '1px solid rgba(216,210,198,0.35)', opacity: isDone ? 0.55 : 1 }}>
+                    <div onClick={() => onUpdateTask(t.id, { status: isDone ? 'todo' : 'done' })}
+                      style={{ width: 15, height: 15, borderRadius: 3, flexShrink: 0, cursor: 'pointer', border: `1.5px solid ${isDone ? '#2C2C2C' : '#D8D2C6'}`, background: isDone ? '#2C2C2C' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s' }}>
+                      {isDone && <Check style={{ width: 9, height: 9, color: '#FAF9F6', strokeWidth: 3 }} />}
+                    </div>
+                    {hasSubtasks && (
+                      <button onClick={e => { e.stopPropagation(); toggleTaskExpanded(t.id) }}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#9BA69A', fontSize: 9, flexShrink: 0, display: 'flex', alignItems: 'center', transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                        title={isExpanded ? 'Collapse subtasks' : 'Expand subtasks'}>▶</button>
+                    )}
+                    <span onClick={() => onOpenTask(t)} style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#2C2C2C', ...FONT, cursor: 'pointer', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: isDone ? 'line-through' : 'none' }}>
+                      {t.title}
+                    </span>
+                    {hasSubtasks && (
+                      <span style={{ ...FONT, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99, flexShrink: 0, background: doneSubs === totalSubs ? 'rgba(120,183,197,0.15)' : 'rgba(44,44,44,0.06)', color: doneSubs === totalSubs ? '#3d7684' : '#747474', border: `1px solid ${doneSubs === totalSubs ? 'rgba(120,183,197,0.3)' : 'rgba(44,44,44,0.12)'}` }}>
+                        {doneSubs}/{totalSubs}
                       </span>
                     )}
-                    <input type="date" value={subDueDate || ''} onChange={e => { e.stopPropagation(); onUpdateSubtaskDate(s, e.target.value) }}
-                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} tabIndex={-1} />
-                  </label>
-                </div>
-              )
-            }) : []
+                    <span style={{ ...PILL_BASE, background: ps2.bg, color: ps2.color, flexShrink: 0 }}>{t.priority}</span>
+                    <select value={t.status} onChange={e => { e.stopPropagation(); onUpdateTask(t.id, { status: e.target.value as Task['status'] }) }} onClick={e => e.stopPropagation()}
+                      style={{ ...FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '3px 6px', borderRadius: 6, border: `1px solid ${ss.color}50`, background: ss.bg, color: ss.color, outline: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                      <option value="todo">To Do</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="review">Review</option>
+                      <option value="done">Done</option>
+                    </select>
+                    {dueInfo && (
+                      <span style={{ fontSize: 11, flexShrink: 0, ...FONT, color: dueInfo.overdue ? '#C14B3A' : dueInfo.today ? '#C27A54' : '#747474', fontWeight: (dueInfo.overdue || dueInfo.today) ? 600 : 400 }}>
+                        {dueInfo.text}
+                      </span>
+                    )}
+                  </div>
+                )
+                const subtaskRows = (hasSubtasks && isExpanded) ? taskSubs.map((s, si) => {
+                  const subDone = !!s.completed
+                  const isLastSub = i === list.length - 1 && si === taskSubs.length - 1
+                  const subDueDate = s.due_date
+                  const subOverdue = subDueDate && !subDone && new Date(subDueDate + 'T00:00:00') < new Date(new Date().toDateString())
+                  return (
+                    <div key={`sub-${s.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', paddingLeft: 18, borderBottom: isLastSub ? 'none' : '1px solid rgba(216,210,198,0.25)', opacity: subDone ? 0.45 : 1 }}>
+                      <span style={{ color: 'rgba(216,210,198,0.9)', fontSize: 10, flexShrink: 0, marginLeft: -10, marginRight: -2 }}>└</span>
+                      <div onClick={() => onToggleSubtask(s)} style={{ width: 13, height: 13, borderRadius: 3, flexShrink: 0, cursor: 'pointer', border: `1.5px solid ${subDone ? '#2C2C2C' : '#D8D2C6'}`, background: subDone ? '#2C2C2C' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s' }}>
+                        {subDone && <Check style={{ width: 8, height: 8, color: '#FAF9F6', strokeWidth: 3 }} />}
+                      </div>
+                      <span onClick={() => onOpenSubtask(s)} style={{ flex: 1, fontSize: 12, fontWeight: 400, color: '#2C2C2C', ...FONT, cursor: 'pointer', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: subDone ? 'line-through' : 'none' }}>
+                        {s.title}
+                      </span>
+                      <label style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }} title={subDueDate ? 'Change due date' : 'Set due date'}>
+                        <Calendar style={{ width: 11, height: 11, color: subOverdue ? '#C14B3A' : subDueDate ? '#9BA69A' : 'rgba(44,44,44,0.2)' }} />
+                        {subDueDate && <span style={{ fontSize: 10, fontWeight: 600, color: subOverdue ? '#C14B3A' : '#747474', ...FONT }}>{format(parseISO(subDueDate), 'MMM d')}</span>}
+                        <input type="date" value={subDueDate || ''} onChange={e => { e.stopPropagation(); onUpdateSubtaskDate(s, e.target.value) }}
+                          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} tabIndex={-1} />
+                      </label>
+                    </div>
+                  )
+                }) : []
+                return [taskRow, ...subtaskRows]
+              })
+            }
 
-            return [taskRow, ...subtaskRows]
-          })}
+            // Flat render when no groups exist
+            const hasAnyGroup = sortedTasks.some(t => t.task_group)
+            if (!hasAnyGroup) return renderRows(sortedTasks)
+
+            // Grouped render
+            const groupOrder: string[] = []
+            const byGroup: Record<string, Task[]> = {}
+            for (const t of sortedTasks) {
+              const g = t.task_group ?? ''
+              if (!byGroup[g]) { byGroup[g] = []; if (g) groupOrder.push(g) }
+              byGroup[g].push(t)
+            }
+            const sections: string[] = [...new Set(groupOrder)]
+            if (byGroup['']) sections.push('')
+
+            return sections.flatMap(g => {
+              const gtasks = byGroup[g] ?? []
+              if (gtasks.length === 0) return []
+              const header = g ? (
+                <div key={`gh-${g}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 0 4px', borderTop: '1px solid rgba(216,210,198,0.4)' }}>
+                  <div style={{ width: 6, height: 6, borderRadius: 2, background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#747474', ...FONT }}>{g}</span>
+                  <span style={{ fontSize: 10, color: '#D8D2C6', ...FONT }}>{gtasks.length}</span>
+                </div>
+              ) : (sections.length > 1 ? (
+                <div key="gh-ungrouped" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 0 4px', borderTop: '1px solid rgba(216,210,198,0.4)' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#D8D2C6', ...FONT }}>Ungrouped</span>
+                </div>
+              ) : null)
+              return [header, ...renderRows(gtasks)]
+            })
+          })()}
           {/* Footer: show/hide done toggle */}
           {doneCount > 0 && (
             <button
@@ -554,6 +610,7 @@ function WorkTrackingInner() {
   const [ntProject, setNtProject] = useState('')
   const [ntPriority, setNtPriority] = useState('medium')
   const [ntDue, setNtDue] = useState('')
+  const [ntGroupPreset, setNtGroupPreset] = useState('')
 
   // All Tasks tab
   const [taskProjectFilter, setTaskProjectFilter] = useState('all')
@@ -764,6 +821,7 @@ function WorkTrackingInner() {
         project_id: ntProject || null,
         priority: ntPriority,
         due_date: ntDue || null,
+        task_group: ntGroupPreset || null,
         status: 'todo',
       }),
     })
@@ -776,9 +834,10 @@ function WorkTrackingInner() {
       setNtProject('')
       setNtPriority('medium')
       setNtDue('')
+      setNtGroupPreset('')
       setShowNewTaskModal(false)
     }
-  }, [ntTitle, ntProject, ntPriority, ntDue, projects])
+  }, [ntTitle, ntProject, ntPriority, ntDue, ntGroupPreset, projects])
 
   // ── Derived state ───────────────────────────────────────────────────────────
 
@@ -810,7 +869,7 @@ function WorkTrackingInner() {
 
   const filteredProjects = useMemo(() => {
     if (projectFilter === 'all') return projects
-    if (projectFilter === 'complete') return projects.filter(p => p.status === 'complete' || p.status === 'completed')
+    if (projectFilter === 'complete') return projects.filter(p => p.status === 'complete')
     return projects.filter(p => p.status === projectFilter)
   }, [projects, projectFilter])
 
@@ -1141,30 +1200,78 @@ function WorkTrackingInner() {
                   </button>
                 </div>
 
-                {/* Task rows */}
+                {/* Task rows — grouped if any task has a task_group */}
                 <div style={{ padding: '0 22px' }}>
                   {projectTasks.length === 0 ? (
                     <p style={{ fontSize: 13, color: '#747474', padding: '16px 0' }}>No tasks yet. Add one above.</p>
                   ) : filteredProjectTasks.length === 0 ? (
                     <p style={{ fontSize: 13, color: '#747474', padding: '16px 0' }}>No tasks match the current filters.</p>
-                  ) : filteredProjectTasks.map(t => (
-                    <TaskRow
-                      key={t.id}
-                      task={t}
-                      onUpdate={updateTask}
-                      onDelete={deleteTask}
-                      onOpen={setDrawerTask}
-                      showProject={false}
-                      draggable={true}
-                      onDragStart={() => handleDragStart(t.id)}
-                      onDragEnter={() => handleDragEnter(t.id)}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={() => handleDrop(t.id)}
-                      onDragEnd={handleDragEnd}
-                      isDragging={dragId === t.id}
-                      isDragOver={dragOverId === t.id}
-                    />
-                  ))}
+                  ) : (() => {
+                    const hasAnyGroup = filteredProjectTasks.some(t => t.task_group)
+                    if (!hasAnyGroup) {
+                      return filteredProjectTasks.map(t => (
+                        <TaskRow key={t.id} task={t} onUpdate={updateTask} onDelete={deleteTask} onOpen={setDrawerTask}
+                          showProject={false} draggable={true}
+                          onDragStart={() => handleDragStart(t.id)} onDragEnter={() => handleDragEnter(t.id)}
+                          onDragOver={e => e.preventDefault()} onDrop={() => handleDrop(t.id)} onDragEnd={handleDragEnd}
+                          isDragging={dragId === t.id} isDragOver={dragOverId === t.id} />
+                      ))
+                    }
+
+                    // Build ordered group list, preserving first-seen order
+                    const groupOrder: string[] = []
+                    const byGroup: Record<string, Task[]> = {}
+                    for (const t of filteredProjectTasks) {
+                      const g = t.task_group ?? ''
+                      if (!byGroup[g]) { byGroup[g] = []; if (g) groupOrder.push(g) }
+                      byGroup[g].push(t)
+                    }
+                    // Named groups first, ungrouped last
+                    const sections: string[] = [...new Set(groupOrder)]
+                    if (byGroup['']) sections.push('')
+
+                    return sections.flatMap(g => {
+                      const gtasks = byGroup[g] ?? []
+                      if (gtasks.length === 0) return []
+                      return [
+                        g ? (
+                          <div key={`g-${g}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 0 6px', borderTop: '1px solid rgba(216,210,198,0.4)' }}>
+                            <div style={{ width: 8, height: 8, borderRadius: 2, background: COLOR_HEX[selectedProject?.color ?? 'sage'] ?? '#9BAE9A', flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#747474', ...FONT }}>{g}</span>
+                            <button
+                              onClick={() => { setNtProject(String(selectedProject!.id)); setShowNewTaskModal(true); setNtGroupPreset(g) }}
+                              style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#747474', fontSize: 11, ...FONT, opacity: 0.6 }}
+                              title={`Add recipe to ${g}`}
+                            ><Plus size={11} /> Add</button>
+                          </div>
+                        ) : (
+                          sections.length > 1 ? (
+                            <div key="g-ungrouped" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 0 6px', borderTop: '1px solid rgba(216,210,198,0.4)' }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D8D2C6', ...FONT }}>Ungrouped</span>
+                            </div>
+                          ) : null
+                        ),
+                        ...gtasks.map(t => (
+                          <TaskRow key={t.id} task={t} onUpdate={updateTask} onDelete={deleteTask} onOpen={setDrawerTask}
+                            showProject={false} draggable={true}
+                            onDragStart={() => handleDragStart(t.id)} onDragEnter={() => handleDragEnter(t.id)}
+                            onDragOver={e => e.preventDefault()} onDrop={() => handleDrop(t.id)} onDragEnd={handleDragEnd}
+                            isDragging={dragId === t.id} isDragOver={dragOverId === t.id} />
+                        )),
+                      ]
+                    })
+                  })()}
+                </div>
+
+                {/* New group button */}
+                <div style={{ padding: '10px 22px 16px', borderTop: '1px solid rgba(216,210,198,0.3)' }}>
+                  <GroupCreator
+                    onAdd={(groupName) => {
+                      setNtProject(String(selectedProject!.id))
+                      setShowNewTaskModal(true)
+                      setNtGroupPreset(groupName)
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -1331,6 +1438,17 @@ function WorkTrackingInner() {
                   {projectOptions.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
+              {ntGroupPreset && (
+                <div>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#747474', display: 'block', marginBottom: 6 }}>Group</label>
+                  <input
+                    value={ntGroupPreset}
+                    onChange={e => setNtGroupPreset(e.target.value)}
+                    placeholder="Group name…"
+                    style={{ width: '100%', ...FONT, fontSize: 13, color: '#2C2C2C', border: '1px solid #D8D2C6', borderRadius: 8, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#747474', display: 'block', marginBottom: 6 }}>Priority</label>

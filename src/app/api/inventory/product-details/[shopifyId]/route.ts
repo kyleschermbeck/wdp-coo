@@ -7,7 +7,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ shopif
 
   const ingredients = db.prepare(`
     SELECT pi.id, pi.supply_id, pi.tbsp, pi.sort_order,
-           s.name as supply_name, s.oz_per_tbsp, s.package_cost, s.package_weight, s.serving_size
+           s.name as supply_name, s.oz_per_tbsp, s.package_cost, s.package_weight, s.serving_size,
+           s.containers_on_hand, s.package_extra_oz
     FROM product_ingredients pi
     JOIN supplies s ON s.id = pi.supply_id
     WHERE pi.shopify_product_id = ?
@@ -54,17 +55,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sho
     }
 
     if (labor_cost != null || cost_per_unit != null) {
-      db.prepare(`
-        INSERT INTO product_local (shopify_product_id, labor_cost, cost_per_unit)
-        VALUES (?, ?, ?)
-        ON CONFLICT(shopify_product_id) DO UPDATE SET
-          labor_cost = COALESCE(excluded.labor_cost, labor_cost),
-          cost_per_unit = COALESCE(excluded.cost_per_unit, cost_per_unit)
-      `).run(
-        shopifyId,
-        labor_cost != null ? parseFloat(labor_cost) : null,
-        cost_per_unit != null ? parseFloat(cost_per_unit) : null,
-      )
+      const existing = db.prepare('SELECT shopify_product_id FROM product_local WHERE shopify_product_id = ?').get(shopifyId)
+      if (existing) {
+        const setParts: string[] = []
+        const vals: unknown[] = []
+        if (labor_cost != null) { setParts.push('labor_cost = ?'); vals.push(parseFloat(labor_cost)) }
+        if (cost_per_unit != null) { setParts.push('cost_per_unit = ?'); vals.push(parseFloat(cost_per_unit)) }
+        if (setParts.length) db.prepare(`UPDATE product_local SET ${setParts.join(', ')} WHERE shopify_product_id = ?`).run(...vals, shopifyId)
+      } else {
+        db.prepare('INSERT INTO product_local (shopify_product_id, labor_cost, cost_per_unit) VALUES (?, ?, ?)').run(
+          shopifyId,
+          labor_cost != null ? parseFloat(labor_cost) : 0,
+          cost_per_unit != null ? parseFloat(cost_per_unit) : 0,
+        )
+      }
     }
   })()
 

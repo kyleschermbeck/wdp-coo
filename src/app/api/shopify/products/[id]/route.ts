@@ -24,6 +24,7 @@ interface PatchBody {
   // Local only
   reorder_threshold?: number
   is_bundle?: number
+  accent_color?: string | null
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -157,6 +158,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       VALUES (?, ?)
       ON CONFLICT(shopify_product_id) DO UPDATE SET reorder_threshold = excluded.reorder_threshold
     `).run(id, body.reorder_threshold)
+  }
+
+  // ── Accent color → local DB only ──────────────────────────────────────────
+  if (body.accent_color !== undefined) {
+    db.prepare(`UPDATE shopify_products SET accent_color = ? WHERE shopify_id = ?`).run(body.accent_color, id)
   }
 
   if (errors.length > 0) {

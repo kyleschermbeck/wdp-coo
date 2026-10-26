@@ -65,10 +65,12 @@ function isRecipeProject(task: Task | null): boolean {
   return !!task?.project_name?.toLowerCase().includes('recipe')
 }
 
-const LABEL = "block text-[10px] font-semibold text-ink uppercase tracking-widest mb-2"
+const LABEL = "block text-[9px] font-bold text-ink/50 uppercase tracking-[0.12em] mb-1.5"
 const LABEL_STYLE = { fontFamily: "'Jost', system-ui, sans-serif", letterSpacing: '0.12em' }
 const FONT = { fontFamily: "'Jost', system-ui, sans-serif" }
-const TEXTAREA_CLASS = "w-full px-3 py-2.5 text-sm bg-white border border-mushroom rounded-xl outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink text-ink-dark placeholder:text-ink/40 resize-none transition-all"
+const TEXTAREA_CLASS = "w-full px-3 py-2 text-sm bg-white/60 border border-mushroom rounded-lg outline-none focus:ring-1 focus:ring-ink/10 focus:border-ink/30 text-ink-dark placeholder:text-ink/30 resize-none transition-all"
+const INPUT_CLASS = "w-full px-3 py-2 text-sm bg-white/60 border border-mushroom rounded-lg outline-none focus:ring-1 focus:ring-ink/10 focus:border-ink/30 text-ink-dark placeholder:text-ink/30 transition-all"
+const PANEL_BG = '#F7F7F5'
 
 const COLOR_HEX: Record<string, string> = {
   sage: '#9BAE9A', terracotta: '#C27A54', butter: '#DFC97B', tomato: '#C14B3A',
@@ -101,6 +103,7 @@ export function TaskDetailDrawer({ task, onClose, onUpdate, onDelete, onSubtaskT
   const [notes, setNotes] = useState('')
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [taskGroup, setTaskGroup] = useState('')
   const [status, setStatus] = useState<TaskStatus>('todo')
   const [priority, setPriority] = useState<TaskPriority>('medium')
   const [tags, setTags] = useState<Tag[]>([])
@@ -162,6 +165,7 @@ export function TaskDetailDrawer({ task, onClose, onUpdate, onDelete, onSubtaskT
     setNotes(task.notes ?? '')
     setStartDate(task.start_date ?? '')
     setDueDate(task.due_date ?? '')
+    setTaskGroup(task.task_group ?? '')
     setStatus(task.status)
     setPriority(task.priority)
     setAgentError('')
@@ -589,57 +593,60 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
         <div className="fixed inset-0 z-30" style={{ backgroundColor: 'rgba(44,44,44,0.2)' }} onClick={onClose} />
       )}
       <div className={cn(
-        'fixed top-0 right-0 h-full bg-cream border-l border-mushroom z-40',
+        'fixed top-0 right-0 h-full border-l border-mushroom z-40',
         'transition-transform duration-300 ease-in-out flex flex-col',
-        isRecipe ? 'w-[560px]' : 'w-96',
+        isRecipe ? 'w-[560px]' : 'w-[360px]',
         open ? 'translate-x-0 shadow-2xl' : 'translate-x-full'
-      )}>
+      )} style={{ background: PANEL_BG }}>
         {!task ? null : (
           <>
-            {/* Color strip */}
-            <div style={{ height: 4, background: accentColor, flexShrink: 0 }} />
+            {/* Thin project color accent */}
+            <div style={{ height: 3, background: accentColor, flexShrink: 0 }} />
 
             {/* Header */}
-            <div style={{ padding: '10px 20px', borderBottom: '1px solid rgba(216,210,198,0.6)', flexShrink: 0, ...FONT }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: '#9BA69A', margin: '0 0 3px' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(216,210,198,0.5)', flexShrink: 0, ...FONT }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9BA69A' }}>
                     {isRecipe ? 'Recipe' : 'Task'}
-                  </p>
+                  </span>
                   {task.project_name && (
-                    <Link
-                      href={`/projects/${task.project_id}`}
-                      onClick={onClose}
-                      style={{ fontSize: 12, color: '#747474', fontWeight: 500, textDecoration: 'none' }}
-                      className="hover:text-ink-dark transition-colors"
-                    >
-                      {task.project_name}
-                    </Link>
+                    <>
+                      <div style={{ width: 3, height: 3, borderRadius: '50%', background: accentColor }} />
+                      <Link
+                        href={`/projects/${task.project_id}`}
+                        onClick={onClose}
+                        style={{ fontSize: 11, color: '#9BA69A', fontWeight: 500, textDecoration: 'none' }}
+                        className="hover:text-ink-dark transition-colors"
+                      >
+                        {task.project_name}
+                      </Link>
+                    </>
                   )}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                  {saving && <span style={{ fontSize: 11, color: '#9BA69A', marginRight: 4 }}>Saving…</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {saving && <span style={{ fontSize: 9, color: '#9BA69A', marginRight: 4 }}>saving…</span>}
                   <button onClick={promoteToProject} disabled={promoting} title="Promote to project"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, color: '#9BA69A', display: 'flex', borderRadius: 6 }}
                     className="hover:text-blueberry transition-colors disabled:opacity-40">
-                    <FolderInput style={{ width: 15, height: 15 }} />
+                    <FolderInput style={{ width: 14, height: 14 }} />
                   </button>
                   <button onClick={() => { onDelete(task.id); onClose() }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, color: '#9BA69A', display: 'flex', borderRadius: 6 }}
                     className="hover:text-tomato transition-colors">
-                    <Trash2 style={{ width: 15, height: 15 }} />
+                    <Trash2 style={{ width: 14, height: 14 }} />
                   </button>
                   <button onClick={onClose}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, color: '#9BA69A', display: 'flex', borderRadius: 6 }}
                     className="hover:text-ink-dark transition-colors">
-                    <X style={{ width: 15, height: 15 }} />
+                    <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto" style={{ padding: '18px 20px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {/* Title — large serif */}
+            <div className="flex-1 overflow-y-auto" style={{ padding: '16px 16px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Title */}
               <div>
                 <input
                   value={title}
@@ -647,71 +654,60 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                   onBlur={() => { if (title.trim() && title !== task.title) save({ title }) }}
                   placeholder="Task title…"
                   style={{
-                    width: '100%', fontFamily: "'Cormorant Garamond', Georgia, serif",
-                    fontSize: 24, fontWeight: 600, color: '#2C2C2C',
+                    width: '100%', fontFamily: "'Jost', system-ui, sans-serif",
+                    fontSize: 16, fontWeight: 700, color: '#2C2C2C',
                     background: 'transparent', border: 'none', outline: 'none',
-                    borderBottom: '1px solid rgba(216,210,198,0.6)', paddingBottom: 8,
-                    lineHeight: 1.2,
+                    lineHeight: 1.3,
                   }}
                 />
               </div>
 
-              {/* Chips: status + priority + date range */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                <select
-                  value={status}
-                  onChange={e => { const v = e.target.value as TaskStatus; setStatus(v); save({ status: v }) }}
-                  style={{ ...CHIP_SELECT, border: `1px solid ${chipStatus.color}55`, background: chipStatus.bg, color: chipStatus.color }}
-                >
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="review">Review</option>
-                  <option value="done">Done</option>
-                </select>
-
-                <select
-                  value={priority}
-                  onChange={e => { const v = e.target.value as TaskPriority; setPriority(v); save({ priority: v }) }}
-                  style={{ ...CHIP_SELECT, border: `1px solid ${chipPriority.color}55`, background: chipPriority.bg, color: chipPriority.color }}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                </select>
-
-                {/* Date range chip */}
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer',
-                  padding: '4px 10px', borderRadius: 999,
-                  background: 'rgba(216,210,198,0.25)', border: '1px solid rgba(216,210,198,0.6)',
-                  ...FONT, fontSize: 11, color: '#747474', position: 'relative',
-                }}>
-                  <Calendar style={{ width: 11, height: 11, flexShrink: 0 }} />
-                  <span>{startDate ? format(parseISO(startDate), 'MMM d') : 'Start'}</span>
-                  <span style={{ opacity: 0.4 }}>→</span>
-                  <span style={{ color: dueDate ? '#2C2C2C' : undefined, fontWeight: dueDate ? 600 : 400 }}>
-                    {dueDate ? format(parseISO(dueDate), 'MMM d') : 'Due'}
-                  </span>
-                  <div style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none', display: 'flex' }}>
-                    <input type="date" value={startDate}
-                      onChange={e => { setStartDate(e.target.value); save({ start_date: e.target.value || null }) }}
-                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', pointerEvents: 'auto', width: '50%' }} />
-                    <input type="date" value={dueDate}
-                      onChange={e => { setDueDate(e.target.value); save({ due_date: e.target.value || null }) }}
-                      style={{ position: 'absolute', inset: 0, left: '50%', opacity: 0, cursor: 'pointer', pointerEvents: 'auto', width: '50%' }} />
-                  </div>
-                </label>
-
-                {(startDate || dueDate) && (
-                  <button
-                    onClick={() => { setStartDate(''); setDueDate(''); save({ start_date: null, due_date: null }) }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10.5, color: '#9BA69A', ...FONT, padding: '2px 4px' }}
-                    className="hover:text-tomato"
+              {/* Status + Priority grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label className={LABEL} style={LABEL_STYLE}>Status</label>
+                  <select
+                    value={status}
+                    onChange={e => { const v = e.target.value as TaskStatus; setStatus(v); save({ status: v }) }}
+                    style={{ width: '100%', ...FONT, fontSize: 11, padding: '5px 8px', border: '1px solid rgba(216,210,198,0.7)', borderRadius: 6, background: 'white', color: chipStatus.color, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}
                   >
-                    Clear dates
-                  </button>
-                )}
+                    <option value="todo">To Do</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="review">Review</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL} style={LABEL_STYLE}>Priority</label>
+                  <select
+                    value={priority}
+                    onChange={e => { const v = e.target.value as TaskPriority; setPriority(v); save({ priority: v }) }}
+                    style={{ width: '100%', ...FONT, fontSize: 11, padding: '5px 8px', border: '1px solid rgba(216,210,198,0.7)', borderRadius: 6, background: 'white', color: chipPriority.color, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Start + Due dates */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label className={LABEL} style={LABEL_STYLE}>Start date</label>
+                  <input type="date" value={startDate}
+                    onChange={e => { setStartDate(e.target.value); save({ start_date: e.target.value || null }) }}
+                    style={{ width: '100%', ...FONT, fontSize: 11, padding: '5px 8px', border: '1px solid rgba(216,210,198,0.7)', borderRadius: 6, background: 'white', color: '#2C2C2C', cursor: 'pointer' }}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL} style={LABEL_STYLE}>Due date</label>
+                  <input type="date" value={dueDate}
+                    onChange={e => { setDueDate(e.target.value); save({ due_date: e.target.value || null }) }}
+                    style={{ width: '100%', ...FONT, fontSize: 11, padding: '5px 8px', border: '1px solid rgba(216,210,198,0.7)', borderRadius: 6, background: 'white', color: '#2C2C2C', cursor: 'pointer' }}
+                  />
+                </div>
               </div>
 
               {/* Tags */}
@@ -723,13 +719,29 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                 </div>
               </div>
 
+              {/* Group */}
+              {task.project_id && (
+                <div>
+                  <label className={LABEL} style={LABEL_STYLE}>Group</label>
+                  <input
+                    value={taskGroup}
+                    onChange={e => setTaskGroup(e.target.value)}
+                    onBlur={() => save({ task_group: taskGroup.trim() || null })}
+                    onKeyDown={e => { if (e.key === 'Enter') save({ task_group: taskGroup.trim() || null }) }}
+                    placeholder="e.g. Summer Grilling, Holiday Entertaining…"
+                    className={INPUT_CLASS}
+                    style={FONT}
+                  />
+                </div>
+              )}
+
               {/* Project */}
               <div>
                 <label className={LABEL} style={LABEL_STYLE}>Project</label>
                 <select
                   value={task.project_id ?? ''}
                   onChange={e => moveToProject(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full text-sm bg-white border border-mushroom rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-ink/20 cursor-pointer text-ink-dark"
+                  className={INPUT_CLASS + " cursor-pointer"}
                   style={FONT}
                 >
                   <option value="">No Project</option>
@@ -751,7 +763,7 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                     onBlur={() => setTimeout(() => setShowNestList(false), 150)}
                     placeholder={converting ? 'Converting…' : 'Search tasks…'}
                     disabled={converting}
-                    className="w-full px-2.5 py-1.5 text-sm bg-white border border-mushroom rounded-lg outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink text-ink-dark placeholder:text-ink/30 transition-all disabled:opacity-50"
+                    className={INPUT_CLASS + " disabled:opacity-50"}
                     style={FONT}
                   />
                   {showNestList && (() => {
@@ -783,14 +795,18 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
 
               {/* Subtasks */}
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <label className={LABEL} style={LABEL_STYLE}>Subtasks</label>
-                  {subtasks.length > 0 && (
-                    <span className="text-[10px] text-ink/40" style={FONT}>
-                      {subtasks.filter(s => !!s.completed).length}/{subtasks.length} done
-                    </span>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label className={LABEL} style={{ ...LABEL_STYLE, marginBottom: 0 }}>
+                    Subtasks{subtasks.length > 0 ? ` · ${subtasks.filter(s => !!s.completed).length}/${subtasks.length}` : ''}
+                  </label>
                 </div>
+
+                {/* Progress bar */}
+                {subtasks.length > 0 && (
+                  <div style={{ height: 3, borderRadius: 2, background: 'rgba(216,210,198,0.5)', marginBottom: 8, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(subtasks.filter(s => !!s.completed).length / subtasks.length) * 100}%`, background: '#27AE60', borderRadius: 2, transition: 'width 0.25s ease' }} />
+                  </div>
+                )}
 
                 {subtasks.length > 0 && (
                   <div className="space-y-0.5 mb-3">
@@ -803,52 +819,44 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                         onDrop={() => handleSubtaskDrop(i)}
                         onDragEnd={() => { setDragOverIndex(null); dragIndexRef.current = null }}
                         className={cn(
-                          'flex items-center gap-2 group rounded-lg px-1 py-1.5 hover:bg-oatmilk/60 transition-all',
+                          'flex items-center gap-2 group rounded-lg px-1 py-1 transition-all',
                           dragOverIndex === i && 'border-t-2 border-blueberry'
                         )}
+                        style={{ background: 'transparent' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(216,210,198,0.2)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
                         <GripVertical className="w-3.5 h-3.5 text-mushroom opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing shrink-0" />
                         <button
                           onClick={() => toggleSubtask(s)}
-                          className={cn(
-                            'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all cursor-pointer',
-                            !!s.completed
-                              ? 'bg-ink border-ink'
-                              : 'border-mushroom bg-white hover:border-ink'
-                          )}
+                          style={{
+                            width: 16, height: 16, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            border: `1.5px solid ${s.completed ? '#27AE60' : 'rgba(155,166,154,0.6)'}`,
+                            background: s.completed ? '#27AE60' : 'white',
+                            transition: 'all 0.12s', padding: 0,
+                          }}
                         >
-                          {!!s.completed && <Check className="w-2.5 h-2.5 text-cream" />}
+                          {!!s.completed && <Check style={{ width: 9, height: 9, color: 'white', strokeWidth: 3 }} />}
                         </button>
                         <span
                           onClick={() => onOpenSubtask?.(s)}
-                          className={cn('text-sm flex-1 min-w-0', !!s.completed ? 'text-ink/40 line-through' : 'text-ink-dark', onOpenSubtask ? 'cursor-pointer hover:underline' : '')}
-                          style={FONT}
+                          className={cn('text-sm flex-1 min-w-0', onOpenSubtask ? 'cursor-pointer hover:underline' : '')}
+                          style={{ ...FONT, fontSize: 12, color: s.completed ? 'rgba(44,44,44,0.35)' : '#2C2C2C', textDecoration: s.completed ? 'line-through' : 'none' }}
                         >
                           {s.title}
                         </span>
-                        {/* Due date — calendar icon always visible, invisible date input overlaid */}
-                        <label
-                          className="relative shrink-0 flex items-center gap-1 cursor-pointer"
-                          title={s.due_date ? 'Change due date' : 'Set due date'}
-                        >
-                          <Calendar className="w-3 h-3" style={{ color: s.due_date ? (new Date(s.due_date + 'T00:00:00') < new Date(new Date().toDateString()) && !s.completed ? '#C14B3A' : '#9BA69A') : 'rgba(44,44,44,0.2)' }} />
+                        {/* Due date */}
+                        <label className="relative shrink-0 flex items-center gap-1 cursor-pointer" title={s.due_date ? 'Change due date' : 'Set due date'}>
+                          <Calendar className="w-3 h-3" style={{ color: s.due_date ? (new Date(s.due_date + 'T00:00:00') < new Date(new Date().toDateString()) && !s.completed ? '#C14B3A' : '#9BA69A') : 'rgba(44,44,44,0.15)' }} />
                           {s.due_date && (
-                            <span style={{ fontSize: 10, fontWeight: 600, color: new Date(s.due_date + 'T00:00:00') < new Date(new Date().toDateString()) && !s.completed ? '#C14B3A' : '#747474', ...FONT }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: new Date(s.due_date + 'T00:00:00') < new Date(new Date().toDateString()) && !s.completed ? '#C14B3A' : '#9BA69A', ...FONT }}>
                               {format(parseISO(s.due_date), 'MMM d')}
                             </span>
                           )}
-                          <input
-                            type="date"
-                            value={s.due_date || ''}
-                            onChange={e => updateSubtaskDueDate(s, e.target.value)}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                            tabIndex={-1}
-                          />
+                          <input type="date" value={s.due_date || ''} onChange={e => updateSubtaskDueDate(s, e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer w-full" tabIndex={-1} />
                         </label>
-                        <button
-                          onClick={() => deleteSubtask(s.id)}
-                          className="text-ink/20 hover:text-tomato transition-colors cursor-pointer p-0.5 shrink-0 opacity-0 group-hover:opacity-100"
-                        >
+                        <button onClick={() => deleteSubtask(s.id)} className="text-ink/20 hover:text-tomato transition-colors cursor-pointer p-0.5 shrink-0 opacity-0 group-hover:opacity-100">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -856,24 +864,25 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                   </div>
                 )}
 
-                <div className="flex items-center gap-2">
+                {/* Add subtask */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 16, height: 16, borderRadius: 4, border: '1.5px dashed rgba(155,166,154,0.5)', flexShrink: 0 }} />
                   <input
                     value={newSubtaskTitle}
                     onChange={e => setNewSubtaskTitle(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addSubtask() }}
                     placeholder="Add a subtask…"
-                    className="flex-1 px-2.5 py-1.5 text-sm bg-white border border-mushroom rounded-lg outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink text-ink-dark placeholder:text-ink/30 transition-all"
-                    style={FONT}
+                    style={{ flex: 1, ...FONT, fontSize: 12, background: 'transparent', border: 'none', outline: 'none', color: '#2C2C2C' }}
                   />
-                  <button
-                    onClick={addSubtask}
-                    disabled={!newSubtaskTitle.trim() || subtaskAdding}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer disabled:opacity-40"
-                    style={{ ...FONT, borderColor: 'rgba(44,44,44,0.2)', color: '#2C2C2C' }}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add
-                  </button>
+                  {newSubtaskTitle.trim() && (
+                    <button
+                      onClick={addSubtask}
+                      disabled={subtaskAdding}
+                      style={{ ...FONT, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, border: 'none', background: '#D7FF10', color: '#000', cursor: 'pointer' }}
+                    >
+                      Add
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -913,7 +922,7 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                     onFocus={() => setShowDepList(true)}
                     onBlur={() => setTimeout(() => setShowDepList(false), 150)}
                     placeholder="Search tasks to block on…"
-                    className="w-full px-2.5 py-1.5 text-sm bg-white border border-mushroom rounded-lg outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink text-ink-dark placeholder:text-ink/30 transition-all"
+                    className={INPUT_CLASS}
                     style={FONT}
                   />
                   {showDepList && (() => {
@@ -1009,7 +1018,7 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                               if (e.key === 'Backspace' && line === '' && arr.length > 1) { e.preventDefault(); const next = arr.filter((_, j) => j !== i); setLines('ingredients', next); setTimeout(() => ingredientRefs.current[Math.max(0, i - 1)]?.focus(), 0) }
                             }}
                             placeholder={i === 0 ? '2 tbsp WDP House Seasoning' : 'Add ingredient…'}
-                            className={'flex-1 px-2.5 py-1.5 text-sm bg-white border border-mushroom rounded-lg outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink text-ink-dark placeholder:text-ink/30 transition-all' + (recipe.recipe_kit_id ? ' opacity-50 cursor-not-allowed' : '')}
+                            className={INPUT_CLASS + (recipe.recipe_kit_id ? ' opacity-50 cursor-not-allowed' : '')}
                             style={FONT}
                           />
                           {arr.length > 1 && !recipe.recipe_kit_id && (
@@ -1082,7 +1091,7 @@ ${includesRecipe ? `First, output a JSON block with the complete recipe fields (
                             }}
                             placeholder={i === 0 ? 'Preheat oven to 425°F…' : 'Next step…'}
                             rows={2}
-                            className={'flex-1 px-2.5 py-1.5 text-sm bg-white border border-mushroom rounded-lg outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink text-ink-dark placeholder:text-ink/30 resize-none transition-all' + (recipe.recipe_kit_id ? ' opacity-50 cursor-not-allowed' : '')}
+                            className={TEXTAREA_CLASS + (recipe.recipe_kit_id ? ' opacity-50 cursor-not-allowed' : '')}
                             style={FONT}
                           />
                           {arr.length > 1 && !recipe.recipe_kit_id && (

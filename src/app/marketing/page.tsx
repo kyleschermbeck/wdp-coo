@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DetailDrawer } from '@/components/ui/DetailDrawer'
 import { StatusRail } from '@/components/ui/StatusRail'
+import { KlaviyoDrawer } from '@/components/marketing/KlaviyoDrawer'
+import { GADrawer } from '@/components/marketing/GADrawer'
 import {
   format,
   addMonths,
@@ -211,6 +213,8 @@ interface MetaAdsSummary {
 
 interface MetaAdsCampaign {
   id: string; name: string; status: string; objective?: string
+  daily_budget: number | null; lifetime_budget: number | null
+  start_time: string | null; stop_time: string | null
   spend: number; reach: number; impressions: number; clicks: number
   ctr: number; frequency: number; purchases: number; purchase_value: number
   add_to_carts: number; checkouts: number; roas: number; cost_per_purchase: number
@@ -647,6 +651,151 @@ function MetaAdsConnectForm({ onConnected }: { onConnected: () => void }) {
   )
 }
 
+// ─── Shopify Campaigns Card ───────────────────────────────────────────────────
+
+interface ShopifyCampaignActivity {
+  id: string; title: string; status: string; channel: string; currency: string
+  budget_total: number | null; budget_remaining: number | null
+  start: string | null; end: string | null
+  clicks: number; impressions: number; spent: number
+  utm_source: string | null; utm_medium: string | null; utm_campaign: string | null
+}
+
+function ShopifyCampaignsCard({ campaigns, scopeError, syncing, onSync }: {
+  campaigns: ShopifyCampaignActivity[] | null
+  scopeError: boolean
+  syncing: boolean
+  onSync: () => void
+}) {
+  const FONT_S = { fontFamily: "'Jost', system-ui, sans-serif" }
+  const STATUS_COLORS: Record<string, string> = {
+    ACTIVE:    'bg-thyme/10 text-thyme border-thyme/30',
+    PAUSED:    'bg-butter/40 text-ink border-mushroom/40',
+    COMPLETED: 'bg-oatmilk text-ink/50 border-mushroom/30',
+    INACTIVE:  'bg-oatmilk text-ink/50 border-mushroom/30',
+  }
+
+  const totalSpend       = (campaigns ?? []).reduce((s, c) => s + c.spent, 0)
+  const totalClicks      = (campaigns ?? []).reduce((s, c) => s + c.clicks, 0)
+  const totalImpressions = (campaigns ?? []).reduce((s, c) => s + c.impressions, 0)
+
+  return (
+    <div className="rounded-xl border border-mushroom/50 bg-white flex overflow-hidden">
+      <div className="w-1 shrink-0" style={{ background: '#96BF48' }} />
+      <div className="flex-1 p-5 min-w-0">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-5 h-5 rounded flex items-center justify-center" style={{ background: '#96BF48' }}>
+              <span className="text-[10px] font-bold text-white">S</span>
+            </div>
+            <span className="text-base font-semibold text-ink-dark" style={FONT_S}>Shopify Campaigns</span>
+            <span className="text-xs text-ink/40" style={FONT_S}>Campaign Autopilot</span>
+          </div>
+          <button
+            onClick={onSync}
+            disabled={syncing}
+            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border border-mushroom/50 text-ink/50 hover:text-ink hover:border-mushroom transition-colors disabled:opacity-40 cursor-pointer"
+            style={FONT_S}
+          >
+            <RefreshCw className={cn('w-2.5 h-2.5', syncing && 'animate-spin')} />
+            {syncing ? 'Syncing…' : 'Sync'}
+          </button>
+        </div>
+
+        {/* Scope error */}
+        {scopeError && (
+          <div className="rounded-lg border border-butter/60 bg-butter/20 p-4 space-y-1">
+            <p className="text-sm font-semibold text-ink-dark" style={FONT_S}>Reconnect Shopify to enable this</p>
+            <p className="text-xs text-ink/60 leading-relaxed" style={FONT_S}>
+              Campaign Autopilot data requires the <code className="bg-oatmilk px-1 rounded text-[10px]">read_marketing_events</code> scope.
+              Go to <strong>Settings → Shopify</strong> and reconnect your store — your existing data won't be affected.
+            </p>
+          </div>
+        )}
+
+        {/* Loading */}
+        {!scopeError && !campaigns && syncing && (
+          <p className="text-sm text-ink/40 py-4" style={FONT_S}>Loading campaigns…</p>
+        )}
+
+        {/* Empty */}
+        {!scopeError && campaigns && campaigns.length === 0 && (
+          <p className="text-sm text-ink/40 py-4" style={FONT_S}>No Campaign Autopilot campaigns found.</p>
+        )}
+
+        {/* Data */}
+        {!scopeError && campaigns && campaigns.length > 0 && (
+          <div className="space-y-5">
+
+            {/* Summary row */}
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'Total Spend',   value: fmtCurrency(totalSpend) },
+                { label: 'Clicks',        value: fmtNum(totalClicks) },
+                { label: 'Impressions',   value: fmtNum(totalImpressions) },
+                { label: 'Campaigns',     value: String(campaigns.length) },
+              ].map(s => (
+                <div key={s.label} className="bg-oatmilk/40 rounded-lg px-3 py-2.5 text-center border border-mushroom/30">
+                  <p className="text-lg font-bold text-ink-dark leading-none" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>{s.value}</p>
+                  <p className="text-[10px] text-ink/50 mt-0.5 uppercase tracking-wide" style={FONT_S}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Campaigns table */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-2" style={FONT_S}>Campaigns</p>
+              <div className="rounded-xl border border-mushroom/40 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-oatmilk/40 border-b border-mushroom/30">
+                      {['Campaign', 'Channel', 'Status', 'Budget', 'Spent', 'Clicks', 'Impressions', 'Dates'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left font-semibold text-ink/50 uppercase tracking-wider text-[10px] whitespace-nowrap" style={FONT_S}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {campaigns.map((c, i) => {
+                      const startStr = c.start ? new Date(c.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
+                      const endStr   = c.end   ? new Date(c.end).toLocaleDateString('en-US',   { month: 'short', day: 'numeric' }) : null
+                      const dateStr  = startStr ? (endStr ? `${startStr} – ${endStr}` : `${startStr}+`) : '—'
+                      return (
+                        <tr key={c.id} className={cn('border-b border-mushroom/20 last:border-0', i % 2 === 0 ? 'bg-white' : 'bg-oatmilk/20')}>
+                          <td className="px-3 py-2.5 text-ink-dark font-medium max-w-[160px] truncate whitespace-nowrap" style={FONT_S} title={c.title}>{c.title}</td>
+                          <td className="px-3 py-2.5 text-ink/60 whitespace-nowrap capitalize" style={FONT_S}>{c.channel.toLowerCase().replace(/_/g, ' ')}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className={cn('text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border', STATUS_COLORS[c.status] ?? 'bg-oatmilk text-ink border-mushroom/40')} style={FONT_S}>
+                              {c.status.toLowerCase()}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={FONT_S}>
+                            {c.budget_total != null ? fmtCurrency(c.budget_total) : '—'}
+                            {c.budget_remaining != null && c.budget_total != null && (
+                              <span className="text-[10px] text-ink/30 ml-1">({fmtCurrency(c.budget_remaining)} left)</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-ink-dark font-medium whitespace-nowrap" style={FONT_S}>{fmtCurrency(c.spent)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={FONT_S}>{fmtNum(c.clicks)}</td>
+                          <td className="px-3 py-2.5 text-ink/70 whitespace-nowrap" style={FONT_S}>{fmtNum(c.impressions)}</td>
+                          <td className="px-3 py-2.5 text-ink/40 whitespace-nowrap text-[10px]" style={FONT_S}>{dateStr}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      </div>
+    </div>
+  )
+}
+
 function MetaAdsCard() {
   const [status, setStatus] = useState<{ connected: boolean; account_name?: string } | null>(null)
   const [analytics, setAnalytics] = useState<MetaAdsAnalytics | null>(null)
@@ -656,6 +805,9 @@ function MetaAdsCard() {
   const [tokenExpired, setTokenExpired] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [days, setDays] = useState(30)
+  const [insights, setInsights] = useState<string | null>(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
+  const [insightsError, setInsightsError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/meta-ads/status').then(r => r.json()).then(setStatus)
@@ -663,6 +815,7 @@ function MetaAdsCard() {
 
   function loadAnalytics() {
     setLoading(true); setError(null); setTokenExpired(false)
+    setInsights(null); setInsightsError(null)
     fetch(`/api/meta-ads/analytics?days=${days}`)
       .then(r => r.json())
       .then((d: MetaAdsAnalytics & { error?: string; token_expired?: boolean; message?: string }) => {
@@ -673,6 +826,21 @@ function MetaAdsCard() {
       .catch(() => { setError('Failed to load analytics'); setLoading(false) })
   }
 
+  function loadInsights(data: MetaAdsAnalytics) {
+    setInsightsLoading(true); setInsightsError(null)
+    fetch('/api/meta-ads/insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days, summary: data.summary, campaigns: data.campaigns, ads: data.ads ?? [] }),
+    })
+      .then(r => r.json())
+      .then((d: { insights?: string; error?: string }) => {
+        if (d.error) { setInsightsError(d.error); setInsightsLoading(false); return }
+        setInsights(d.insights ?? null); setInsightsLoading(false)
+      })
+      .catch(() => { setInsightsError('Failed to load insights'); setInsightsLoading(false) })
+  }
+
   useEffect(() => {
     if (!status?.connected) return
     loadAnalytics()
@@ -680,7 +848,11 @@ function MetaAdsCard() {
 
   async function handleSync() {
     setSyncing(true)
-    try { loadAnalytics() } finally { setSyncing(false) }
+    try {
+      // Also persist fresh data into the DB cache so the command center stays up to date
+      await fetch('/api/meta-ads/sync', { method: 'POST' }).catch(() => {/* non-fatal */})
+      loadAnalytics()
+    } finally { setSyncing(false) }
   }
 
   async function disconnect() {
@@ -689,8 +861,14 @@ function MetaAdsCard() {
   }
 
   const CAMPAIGN_STATUS_COLORS: Record<string, string> = {
-    ACTIVE: 'bg-thyme/10 text-thyme border-thyme/30',
-    PAUSED: 'bg-butter/40 text-ink border-mushroom/40',
+    ACTIVE:          'bg-thyme/10 text-thyme border-thyme/30',
+    PAUSED:          'bg-butter/40 text-ink border-mushroom/40',
+    COMPLETED:       'bg-oatmilk text-ink/50 border-mushroom/30',
+    ARCHIVED:        'bg-oatmilk text-ink/40 border-mushroom/20',
+    WITH_ISSUES:     'bg-terracotta/10 text-terracotta border-terracotta/30',
+    IN_PROCESS:      'bg-blueberry/10 text-blueberry border-blueberry/30',
+    PENDING_REVIEW:  'bg-butter/60 text-ink/70 border-mushroom/40',
+    CAMPAIGN_PAUSED: 'bg-butter/40 text-ink border-mushroom/40',
   }
 
   return (
@@ -707,6 +885,16 @@ function MetaAdsCard() {
             {analytics?.account_name && (
               <span className="text-xs text-ink/40" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{analytics.account_name}</span>
             )}
+            <a
+              href="https://adsmanager.facebook.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[10px] text-ink/40 hover:text-blueberry transition-colors"
+              style={{ fontFamily: "'Jost', system-ui, sans-serif" }}
+            >
+              <ExternalLink className="w-3 h-3" />
+              Ads Manager
+            </a>
           </div>
           <div className="flex items-center gap-2">
             {status?.connected ? (
@@ -933,6 +1121,67 @@ function MetaAdsCard() {
                 </div>
               </div>
             )}
+
+            {/* AI Insights */}
+            <div className="rounded-xl border border-blueberry/20 bg-blueberry/5 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-blueberry/15">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">✦</span>
+                  <span className="text-xs font-semibold text-blueberry" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>AI Insights</span>
+                </div>
+                <button
+                  onClick={() => loadInsights(analytics)}
+                  disabled={insightsLoading}
+                  className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-blueberry text-white hover:bg-blueberry/85 transition-colors disabled:opacity-50 cursor-pointer"
+                  style={{ fontFamily: "'Jost', system-ui, sans-serif" }}
+                >
+                  {insightsLoading ? (
+                    <><RefreshCw className="w-2.5 h-2.5 animate-spin" /> Analysing…</>
+                  ) : insights ? (
+                    <><RefreshCw className="w-2.5 h-2.5" /> Refresh</>
+                  ) : (
+                    <>Get Insights</>
+                  )}
+                </button>
+              </div>
+              <div className="px-4 py-3">
+                {!insights && !insightsLoading && !insightsError && (
+                  <p className="text-xs text-ink/40 italic" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                    Click Get Insights for an AI breakdown of what these numbers mean and what to do next.
+                  </p>
+                )}
+                {insightsError && (
+                  <p className="text-xs text-terracotta" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>{insightsError}</p>
+                )}
+                {insightsLoading && (
+                  <div className="space-y-2 py-1">
+                    {[80, 95, 70, 88, 60].map(w => (
+                      <div key={w} className="h-3 rounded-full bg-blueberry/10 animate-pulse" style={{ width: `${w}%` }} />
+                    ))}
+                  </div>
+                )}
+                {insights && !insightsLoading && (
+                  <div className="text-xs text-ink-dark leading-relaxed space-y-1.5" style={{ fontFamily: "'Jost', system-ui, sans-serif" }}>
+                    {insights.split('\n').map((line, i) => {
+                      if (line.startsWith('## ')) {
+                        return <p key={i} className="text-[11px] font-semibold uppercase tracking-widest text-blueberry pt-2 pb-0.5 first:pt-0">{line.replace('## ', '')}</p>
+                      }
+                      if (line.startsWith('- ')) {
+                        const parts = line.slice(2).split(/\*\*(.+?)\*\*/)
+                        return (
+                          <div key={i} className="flex gap-2">
+                            <span className="text-blueberry/50 shrink-0">·</span>
+                            <span>{parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-semibold text-ink-dark">{p}</strong> : p)}</span>
+                          </div>
+                        )
+                      }
+                      if (line.trim() === '' || line.startsWith('#')) return null
+                      return <p key={i}>{line}</p>
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
 
           </div>
         )}
@@ -3312,9 +3561,20 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
   const [gaConnected, setGaConnected] = useState<boolean | null>(null)
   const [gaMetrics, setGaMetrics] = useState<ChannelMetric[] | null>(null)
   const [gaSyncing, setGaSyncing] = useState(false)
-  type ChannelDrawer = 'instagram' | 'meta_ads' | 'messaging' | 'google_analytics' | null
+  type ChannelDrawer = 'instagram' | 'meta_ads' | 'messaging' | 'google_analytics' | 'shopify_campaigns' | null
   const [channelDrawer, setChannelDrawer] = useState<ChannelDrawer>(null)
+  const [shopifyCampaigns, setShopifyCampaigns] = useState<ShopifyCampaignActivity[] | null>(null)
+  const [shopifyCampaignsSyncing, setShopifyCampaignsSyncing] = useState(false)
+  const [shopifyCampaignsScopeError, setShopifyCampaignsScopeError] = useState(false)
 
+
+  function loadShopifyCampaigns() {
+    setShopifyCampaignsSyncing(true)
+    fetch('/api/shopify/campaigns').then(r => r.json()).then((d: { activities?: ShopifyCampaignActivity[]; error?: string }) => {
+      if (d.error === 'scope_missing') { setShopifyCampaignsScopeError(true) }
+      else { setShopifyCampaigns(d.activities ?? []); setShopifyCampaignsScopeError(false) }
+    }).catch(() => {}).finally(() => setShopifyCampaignsSyncing(false))
+  }
 
   function loadGaData() {
     setGaSyncing(true)
@@ -3454,6 +3714,9 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
       setGaConnected(s.connected)
       if (s.connected) loadGaData()
     }).catch(() => setGaConnected(false))
+
+    // Shopify Campaign Autopilot — load regardless (Shopify always connected)
+    loadShopifyCampaigns()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync All — fires when parent increments syncTrigger
@@ -3464,6 +3727,7 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
     if (messagingConnected) syncs.push(new Promise<void>(res => { loadKlaviyoData(); setTimeout(res, 5000) }))
     if (metaConnected) syncs.push(new Promise<void>(res => { loadMetaData(); setTimeout(res, 3000) }))
     if (gaConnected) syncs.push(new Promise<void>(res => { loadGaData(); setTimeout(res, 3000) }))
+    syncs.push(new Promise<void>(res => { loadShopifyCampaigns(); setTimeout(res, 3000) }))
     if (syncs.length === 0) { onSyncDone?.(); return }
     Promise.all(syncs).then(() => onSyncDone?.())
   }, [syncTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -3951,6 +4215,20 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
             onClick={() => setChannelDrawer('messaging')}
           />
           <ChannelCard name="Google Analytics" color="#E37400" connected={gaConnected} metrics={gaMetrics} onSync={loadGaData} syncing={gaSyncing} onClick={() => setChannelDrawer('google_analytics')} />
+          <ChannelCard
+            name="Shopify Campaigns"
+            color="#96BF48"
+            connected={shopifyCampaignsScopeError ? false : shopifyCampaigns !== null}
+            metrics={shopifyCampaigns && shopifyCampaigns.length > 0 ? [
+              { label: 'Campaigns',   value: String(shopifyCampaigns.length) },
+              { label: 'Total Spend', value: fmtCurrency(shopifyCampaigns.reduce((s, c) => s + c.spent, 0)) },
+              { label: 'Clicks',      value: fmtNum(shopifyCampaigns.reduce((s, c) => s + c.clicks, 0)) },
+              { label: 'Impressions', value: fmtNum(shopifyCampaigns.reduce((s, c) => s + c.impressions, 0)) },
+            ] : null}
+            onSync={loadShopifyCampaigns}
+            syncing={shopifyCampaignsSyncing}
+            onClick={() => setChannelDrawer('shopify_campaigns')}
+          />
         </div>
       </div>
 
@@ -3982,7 +4260,7 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
         subtitle="Klaviyo flows, campaigns, and engagement"
         width={700}
       >
-        <MessagingSection />
+        <KlaviyoDrawer />
       </DetailDrawer>
 
       <DetailDrawer
@@ -3992,7 +4270,22 @@ function OverviewTab({ syncTrigger, onSyncDone }: { syncTrigger?: number; onSync
         subtitle="Sessions, sources, and site performance"
         width={680}
       >
-        <GoogleAnalyticsCard />
+        <GADrawer />
+      </DetailDrawer>
+
+      <DetailDrawer
+        open={channelDrawer === 'shopify_campaigns'}
+        onClose={() => setChannelDrawer(null)}
+        title="Shopify Campaigns"
+        subtitle="Campaign Autopilot — spend, clicks, and impressions"
+        width={680}
+      >
+        <ShopifyCampaignsCard
+          campaigns={shopifyCampaigns}
+          scopeError={shopifyCampaignsScopeError}
+          syncing={shopifyCampaignsSyncing}
+          onSync={loadShopifyCampaigns}
+        />
       </DetailDrawer>
 
       {/* Upcoming content */}
@@ -5494,6 +5787,197 @@ const IDEA_FORMAT_COLORS: Record<string, string> = {
   Story:    'bg-citrus/20 text-ink-dark border-citrus/40',
 }
 
+// ─── Growth Strategy Panel ────────────────────────────────────────────────────
+
+function GrowthStrategyPanel() {
+  const FONT = "'Jost', system-ui, sans-serif"
+  const SERIF = "'Cormorant Garamond', Georgia, serif"
+
+  const [strategy, setStrategy]       = useState<string | null>(null)
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null)
+  const [generating, setGenerating]   = useState(false)
+  const [error, setError]             = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/marketing/growth-strategy')
+      .then(r => r.json())
+      .then((d: { strategy?: string | null; generated_at?: string }) => {
+        if (d.strategy) { setStrategy(d.strategy); setGeneratedAt(d.generated_at ?? null) }
+      })
+      .catch(() => {})
+  }, [])
+
+  async function generate() {
+    setGenerating(true); setError(null)
+    try {
+      const res = await fetch('/api/marketing/growth-strategy', { method: 'POST' })
+      const d = await res.json() as { strategy?: string; generated_at?: string; error?: string }
+      if (d.error) { setError(d.error); return }
+      if (d.strategy) { setStrategy(d.strategy); setGeneratedAt(d.generated_at ?? null) }
+    } catch { setError('Failed to generate strategy') }
+    finally { setGenerating(false) }
+  }
+
+  // Parse markdown into sections for structured display
+  function renderMarkdown(text: string) {
+    const lines = text.split('\n')
+    const elements: React.ReactNode[] = []
+    let key = 0
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (line.startsWith('## ')) {
+        elements.push(
+          <h3 key={key++} style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: '#2C2C2C', margin: '20px 0 8px', letterSpacing: '0.01em' }}>
+            {line.replace('## ', '')}
+          </h3>
+        )
+      } else if (line.startsWith('- ')) {
+        elements.push(
+          <div key={key++} style={{ display: 'flex', gap: 8, marginBottom: 5, paddingLeft: 4 }}>
+            <span style={{ color: 'rgba(44,44,44,0.3)', flexShrink: 0, lineHeight: '1.6', fontFamily: FONT, fontSize: 13 }}>·</span>
+            <span style={{ fontFamily: FONT, fontSize: 13, color: 'rgba(44,44,44,0.8)', lineHeight: '1.6' }}
+              dangerouslySetInnerHTML={{ __html: line.replace('- ', '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
+          </div>
+        )
+      } else if (line.match(/^\d+\./)) {
+        elements.push(
+          <div key={key++} style={{ display: 'flex', gap: 8, marginBottom: 5, paddingLeft: 4 }}>
+            <span style={{ color: 'rgba(44,44,44,0.35)', flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: '1.7' }}>
+              {line.match(/^(\d+)\./)?.[1]}.
+            </span>
+            <span style={{ fontFamily: FONT, fontSize: 13, color: 'rgba(44,44,44,0.8)', lineHeight: '1.6' }}
+              dangerouslySetInnerHTML={{ __html: line.replace(/^\d+\.\s*/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
+          </div>
+        )
+      } else if (line.trim()) {
+        elements.push(
+          <p key={key++} style={{ fontFamily: FONT, fontSize: 13, color: 'rgba(44,44,44,0.75)', lineHeight: '1.65', margin: '4px 0' }}
+            dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
+        )
+      }
+    }
+    return elements
+  }
+
+  const relTime = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return 'just now'
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+  }
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
+        <div>
+          <h2 style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#2C2C2C', margin: '0 0 4px' }}>Growth Strategist</h2>
+          <p style={{ fontFamily: FONT, fontSize: 12, color: 'rgba(44,44,44,0.45)', margin: 0 }}>
+            Synthesizes revenue, Meta Ads, Pinterest, Google Analytics, and email data into a cohesive brand awareness strategy.
+            {generatedAt && <span style={{ marginLeft: 8 }}>Last generated {relTime(generatedAt)}.</span>}
+          </p>
+        </div>
+        <button
+          onClick={generate}
+          disabled={generating}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+            fontFamily: FONT, fontSize: 12, fontWeight: 600,
+            background: generating ? 'rgba(44,44,44,0.06)' : '#2C2C2C',
+            color: generating ? 'rgba(44,44,44,0.4)' : '#FBF7F3',
+            border: 'none', borderRadius: 8, padding: '8px 14px', cursor: generating ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          {generating ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+                style={{ animation: 'spin 1s linear infinite' }}>
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+              Analyzing…
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              {strategy ? 'Regenerate' : 'Generate Strategy'}
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Data sources strip */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[
+          { label: 'Shopify Revenue', dot: '#3A8A5A' },
+          { label: 'Meta Ads', dot: '#1877F2' },
+          { label: 'Pinterest Ads', dot: '#E60023' },
+          { label: 'Google Analytics', dot: '#F4B400' },
+          { label: 'Klaviyo Email', dot: '#9BAE9A' },
+          { label: 'Instagram', dot: '#C27A54' },
+        ].map(s => (
+          <div key={s.label} style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontFamily: FONT, fontSize: 10, fontWeight: 600, letterSpacing: '0.04em',
+            color: 'rgba(44,44,44,0.55)', background: 'rgba(44,44,44,0.04)',
+            border: '1px solid rgba(216,210,198,0.6)', borderRadius: 20, padding: '3px 9px',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot, display: 'inline-block', flexShrink: 0 }} />
+            {s.label}
+          </div>
+        ))}
+      </div>
+
+      {error && (
+        <div style={{ background: '#FFF0EE', border: '1px solid rgba(201,64,64,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+          <p style={{ fontFamily: FONT, fontSize: 13, color: '#C94040', margin: 0 }}>{error}</p>
+        </div>
+      )}
+
+      {/* Generating skeleton */}
+      {generating && !strategy && (
+        <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '24px 24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[180, 120, 200, 140, 160].map((w, i) => (
+              <div key={i} style={{ height: 12, borderRadius: 4, background: `rgba(216,210,198,${0.3 + (i % 2) * 0.1})`, width: `${w}px`, maxWidth: '100%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            ))}
+          </div>
+          <p style={{ fontFamily: FONT, fontSize: 12, color: 'rgba(44,44,44,0.35)', margin: '16px 0 0', fontStyle: 'italic' }}>
+            Pulling revenue, ad spend, traffic, and email data — this takes ~15 seconds…
+          </p>
+        </div>
+      )}
+
+      {/* Strategy output */}
+      {strategy && (
+        <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, padding: '20px 24px' }}>
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+          {renderMarkdown(strategy)}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!strategy && !generating && (
+        <div style={{ background: 'rgba(44,44,44,0.02)', border: '1px dashed rgba(216,210,198,0.8)', borderRadius: 12, padding: '36px 24px', textAlign: 'center' }}>
+          <p style={{ fontFamily: SERIF, fontSize: 18, color: 'rgba(44,44,44,0.4)', margin: '0 0 6px' }}>No strategy generated yet</p>
+          <p style={{ fontFamily: FONT, fontSize: 12, color: 'rgba(44,44,44,0.3)', margin: 0 }}>
+            Click Generate Strategy to pull all your financial and ad data into a cohesive growth plan.
+          </p>
+        </div>
+      )}
+
+      {/* Divider */}
+      {strategy && <div style={{ margin: '28px 0', borderTop: '1px solid rgba(216,210,198,0.4)' }} />}
+    </div>
+  )
+}
+
 function ContentStrategyTab() {
   const FONT = "'Jost', system-ui, sans-serif"
 
@@ -5608,7 +6092,10 @@ function ContentStrategyTab() {
   }
 
   return (
-    <div className="flex gap-7">
+    <div>
+      <GrowthStrategyPanel />
+
+      <div className="flex gap-7">
 
       {/* Left panel */}
       <div className="w-72 shrink-0 space-y-5">
@@ -6073,6 +6560,7 @@ function ContentStrategyTab() {
           </div>
         </>
       )}
+      </div>
     </div>
   )
 }

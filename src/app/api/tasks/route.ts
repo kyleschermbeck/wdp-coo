@@ -52,13 +52,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const db = getDb()
-    const { project_id, title, description, notes, status, priority, due_date, recipe_data } = await req.json()
+    const { project_id, title, description, notes, status, priority, due_date, recipe_data, task_group } = await req.json()
     if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
     const result = db.prepare(`
-      INSERT INTO tasks (project_id, title, description, notes, status, priority, due_date, recipe_data)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(project_id || null, title.trim(), description?.trim() || null, notes?.trim() || null, status || 'todo', priority || 'medium', due_date || null, recipe_data || null)
+      INSERT INTO tasks (project_id, title, description, notes, status, priority, due_date, recipe_data, task_group)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(project_id || null, title.trim(), description?.trim() || null, notes?.trim() || null, status || 'todo', priority || 'medium', due_date || null, recipe_data || null, task_group || null)
 
     const taskId = result.lastInsertRowid
 

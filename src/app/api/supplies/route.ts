@@ -17,13 +17,16 @@ export async function POST(req: NextRequest) {
   const pkgLbs = package_weight ? parseFloat(package_weight) : null
   const pkgExtraOz = package_extra_oz ? parseFloat(package_extra_oz) : 0
   const servSize = serving_size ? parseFloat(serving_size) : null
-  const servUnit = serving_unit === 'tsp' ? 'tsp' : 'oz'
+  const servUnit = serving_unit === 'tsp' ? 'tsp' : serving_unit === 'tbsp' ? 'tbsp' : 'oz'
   const totalServings = total_servings ? parseInt(total_servings) : 0
   const pkgCost = package_cost ? parseFloat(package_cost) : null
   const pkgOz = (pkgLbs ?? 0) * 16 + pkgExtraOz
   let ozPerTbsp: number | null = null
   if (servSize && totalServings && pkgOz) {
-    if (servUnit === 'tsp') {
+    if (servUnit === 'tbsp') {
+      const totalTbsp = totalServings * servSize
+      ozPerTbsp = totalTbsp > 0 ? pkgOz / totalTbsp : null
+    } else if (servUnit === 'tsp') {
       const totalTbsp = (totalServings * servSize) / 3
       ozPerTbsp = totalTbsp > 0 ? pkgOz / totalTbsp : null
     } else {

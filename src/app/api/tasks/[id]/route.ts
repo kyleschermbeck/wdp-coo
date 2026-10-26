@@ -22,17 +22,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const db = getDb()
     const { id } = await params
     const body = await req.json()
-    const { title, description, notes, recipe_data, status, priority, start_date, due_date, parent_task_id, project_id } = body
+    const { title, description, notes, recipe_data, task_group, status, priority, start_date, due_date, parent_task_id, project_id } = body
 
     db.prepare(`
       UPDATE tasks
-      SET title = ?, description = ?, notes = ?, recipe_data = ?, status = ?, priority = ?, start_date = ?, due_date = ?, parent_task_id = ?, project_id = ?
+      SET title = ?, description = ?, notes = ?, recipe_data = ?, task_group = ?, status = ?, priority = ?, start_date = ?, due_date = ?, parent_task_id = ?, project_id = ?
       WHERE id = ?
     `).run(
       title?.trim(),
       description?.trim() || null,
       notes ?? null,
       recipe_data ?? null,
+      task_group || null,
       status,
       priority,
       start_date || null,
@@ -55,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params
     const patch = await req.json() as Record<string, unknown>
 
-    const allowed = ['title', 'description', 'notes', 'recipe_data', 'status', 'priority', 'due_date', 'parent_task_id']
+    const allowed = ['title', 'description', 'notes', 'recipe_data', 'task_group', 'status', 'priority', 'start_date', 'due_date', 'parent_task_id']
     const fields = Object.keys(patch).filter(k => allowed.includes(k))
     if (fields.length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
 

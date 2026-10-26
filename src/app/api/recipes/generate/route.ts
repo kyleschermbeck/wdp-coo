@@ -68,10 +68,12 @@ You MUST respond with a single valid JSON object — no markdown fences, no expl
   "about": "2-4 paragraphs in WDP brand voice. What it is, why it works, what makes it special. Conversational, vivid, makes you want to cook it right now. Include a 'Why You'll Love It' or similar hook at the end.",
   "why": "3-5 bullet points (plain text, one per line starting with •). Key reasons this recipe wins: quick, uses pantry staples, crowd-pleaser, etc.",
   "ingredients": "Full ingredient list as a single string. Each ingredient on its own line. Include quantities. List the WDP spice blend prominently.",
-  "steps": "Numbered recipe steps as a single string. Each step on its own line (1. ... \\n2. ... etc). Clear, confident, home-cook language. Include timing.",
+  "steps": "Numbered recipe steps as a single string. Each step on its own line (1. ... \\n2. ... etc). Clear, confident, home-cook language. Include timing. IMPORTANT: whenever a step references an ingredient, always include the exact quantity (e.g. '2 tbsp Just Dill With It', '1 pound shrimp', '½ cup olive oil') — never say 'the spice blend', 'the marinade', or 'the remaining ingredients' without specifying the amount.",
   "considerations": "2-4 tips, variations, or storage notes. Plain text paragraph or bullet list.",
   "nutrition": "Estimated per serving: calories, protein, carbs, fat. Single line.",
-  "keywords": "Comma-separated SEO keywords including the spice blend name, main protein/veg, cooking method, dietary tags if applicable"
+  "keywords": "6-10 comma-separated SEO keywords: spice blend name, main protein/veg, cooking method, meal type (weeknight dinner, snack, appetizer, etc.), dietary tags if applicable, and 1-2 occasion or vibe words (quick, easy, crowd-pleaser, etc.)",
+  "seo_heading": "Optimized H1 blog post heading (50-60 chars). Different from the recipe title — keyword-forward, search-intent driven. E.g. 'Easy 20-Minute Dill Crackers with Weeknight Dinner Party Seasoning'.",
+  "seo_excerpt": "2-3 sentence meta description / blog excerpt (140-160 chars). Hook the reader, include the primary keyword naturally, and end with a soft CTA or promise."
 }`
 }
 

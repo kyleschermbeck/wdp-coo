@@ -272,6 +272,7 @@ function runMigrations(db: Database.Database) {
   try { db.exec(`ALTER TABLE shopify_config ADD COLUMN client_id TEXT`) } catch {}
   try { db.exec(`ALTER TABLE shopify_config ADD COLUMN client_secret TEXT`) } catch {}
   try { db.exec(`ALTER TABLE shopify_config ADD COLUMN oauth_state TEXT`) } catch {}
+  try { db.exec(`ALTER TABLE shopify_config ADD COLUMN theme_id TEXT`) } catch {}
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS shopify_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -540,6 +541,49 @@ function runMigrations(db: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`)
+  } catch {}
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      tagline TEXT,
+      description TEXT,
+      blend_used TEXT,
+      ingredients TEXT,
+      instructions TEXT,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_by TEXT NOT NULL DEFAULT 'user',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`)
+  } catch {}
+  try { db.exec(`ALTER TABLE recipes ADD COLUMN tags TEXT`) } catch {}
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS label_inventory_excluded (
+      shopify_product_id TEXT PRIMARY KEY
+    )`)
+  } catch {}
+  try { db.exec(`ALTER TABLE supply_order_items ADD COLUMN shopify_product_id TEXT`) } catch {}
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS pack_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shopify_product_id TEXT NOT NULL,
+      order_number INTEGER NOT NULL,
+      qty INTEGER NOT NULL,
+      packed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`)
+  } catch {}
+
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS menu_plans (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      theme TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      blends TEXT NOT NULL DEFAULT '[]',
+      recipes TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`)
+    db.exec(`INSERT OR IGNORE INTO menu_plans (id) VALUES (1)`)
   } catch {}
 }
 

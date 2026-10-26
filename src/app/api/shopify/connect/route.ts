@@ -4,7 +4,11 @@ import { testShopifyConnection } from '@/lib/shopify'
 
 export async function POST(request: Request) {
   const db = getDb()
-  const { store_url, access_token } = await request.json() as { store_url: string; access_token: string }
+  const { store_url, access_token, theme_id } = await request.json() as {
+    store_url: string
+    access_token: string
+    theme_id?: string
+  }
 
   if (!store_url || !access_token) {
     return NextResponse.json({ error: 'store_url and access_token are required' }, { status: 400 })
@@ -12,32 +16,49 @@ export async function POST(request: Request) {
 
   // Normalize store URL — strip protocol and trailing slash
   const normalizedUrl = store_url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+  const normalizedThemeId = theme_id ? String(theme_id).trim() : null
 
-  const config = { id: 1, store_url: normalizedUrl, access_token, last_synced_at: null }
+  const config = { id: 1, store_url: normalizedUrl, access_token, last_synced_at: null, theme_id: normalizedThemeId }
 
   try {
     const shop = await testShopifyConnection(config)
 
-    // Save config
+    // Save config — upsert store credentials and optional theme_id
     db.prepare(`
-      INSERT INTO shopify_config (id, store_url, access_token)
-      VALUES (1, ?, ?)
+      INSERT INTO shopify_config (id, store_url, access_token, theme_id)
+      VALUES (1, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
-        store_url = excluded.store_url,
-        access_token = excluded.access_token
-    `).run(normalizedUrl, access_token)
+        store_url  = excluded.store_url,
+        access_token = excluded.access_token,
+        theme_id   = COALESCE(excluded.theme_id, shopify_config.theme_id)
+    `).run(normalizedUrl, access_token, normalizedThemeId)
 
-    return NextResponse.json({ success: true, shop_name: shop.name, store_url: normalizedUrl })
+    return NextResponse.json({ success: true, shop_name: shop.name, store_url: normalizedUrl, theme_id: normalizedThemeId })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 400 })
   }
 }
 
+// PATCH /api/shopify/connect — update theme_id (or other config) without re-connecting
+export async function PATCH(request: Request) {
+  const db = getDb()
+  const { theme_id } = await request.json() as { theme_id?: string }
+
+  const existing = db.prepare('SELECT id FROM shopify_config WHERE id = 1').get()
+  if (!existing) return NextResponse.json({ error: 'Shopify not connected' }, { status: 400 })
+
+  if (theme_id !== undefined) {
+    db.prepare('UPDATE shopify_config SET theme_id = ? WHERE id = 1').run(theme_id ? String(theme_id).trim() : null)
+  }
+
+  return NextResponse.json({ ok: true })
+}
+
 export async function GET() {
   const db = getDb()
-  const config = db.prepare('SELECT id, store_url, access_token, last_synced_at FROM shopify_config WHERE id = 1').get() as
-    | { id: number; store_url: string; access_token: string; last_synced_at: string | null }
+  const config = db.prepare('SELECT id, store_url, access_token, last_synced_at, theme_id FROM shopify_config WHERE id = 1').get() as
+    | { id: number; store_url: string; access_token: string; last_synced_at: string | null; theme_id: string | null }
     | undefined
 
   if (!config || !config.access_token) {
@@ -48,5 +69,6 @@ export async function GET() {
     connected: true,
     store_url: config.store_url,
     last_synced_at: config.last_synced_at,
+    theme_id: config.theme_id ?? null,
   })
 }

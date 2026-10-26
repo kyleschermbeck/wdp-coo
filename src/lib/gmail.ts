@@ -111,7 +111,8 @@ export async function fetchRecentEmails(maxResults = 100): Promise<{ emails: Ret
     results.push(...batch)
   }
 
-  const emails = results.map(r => mapMessage(r.data))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emails = results.map(r => mapMessage(r.data as any))
   return { emails, listCalls, getCalls: allMessages.length }
 }
 

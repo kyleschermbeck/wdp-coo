@@ -101,6 +101,71 @@ html[data-density="compact"] nav a { padding-top: 0.375rem !important; padding-b
 /* ─── Design system layout utilities ──────────────────────────────────────── */
 /* Wrapped in @layer utilities so Tailwind v4 doesn't strip them             */
 
+/* ── Runtime theme system ──────────────────────────────────────────────────── */
+/* Applied via data-theme / data-accent on <html> by the pre-paint script      */
+
+:root {
+  --wdp-ground:      #FAF9F6;
+  --wdp-surface:     #FFFFFF;
+  --wdp-surface2:    #F2EDE5;
+  --wdp-ink:         #2C2C2C;
+  --wdp-ink-mid:     #747474;
+  --wdp-ink-dim:     rgba(44,44,44,0.38);
+  --wdp-border:      rgba(216,210,198,0.65);
+  --wdp-border2:     rgba(216,210,198,0.35);
+  --wdp-shadow:      0 2px 12px rgba(44,44,44,0.08);
+
+  /* Brand neon — always available */
+  --wdp-neon:        #D7FF10;
+  --wdp-neon-dim:    rgba(215,255,16,0.13);
+
+  /* Accent — overridden by data-accent */
+  --wdp-accent:      #C27A54;
+  --wdp-accent-dim:  rgba(194,122,84,0.14);
+  --wdp-accent-txt:  #FFFFFF;
+
+  /* Agent message bubble background */
+  --wdp-agent-bg:    #F2F2F0;
+  --wdp-panel-bg:    #F5F5F3;
+
+  /* Chat rail (matches ground — light by default) */
+  --wdp-rail-bg:     var(--wdp-ground);
+  --wdp-rail-icon:   rgba(44,44,44,0.42);
+  --wdp-rail-act:    #D7FF10;
+}
+
+/* Background themes */
+[data-theme="white"] {
+  --wdp-ground:   #FFFFFF;
+  --wdp-surface:  #F7F7F5;
+  --wdp-surface2: #EFEFED;
+}
+
+/* cream is the default above */
+
+[data-theme="dark"] {
+  --wdp-ground:    #0F0F0E;
+  --wdp-surface:   #1A1A18;
+  --wdp-surface2:  #252523;
+  --wdp-ink:       #F2F2F0;
+  --wdp-ink-mid:   #A0A09E;
+  --wdp-ink-dim:   rgba(242,242,240,0.32);
+  --wdp-border:    rgba(255,255,255,0.08);
+  --wdp-border2:   rgba(255,255,255,0.04);
+  --wdp-shadow:    0 2px 16px rgba(0,0,0,0.48);
+  --wdp-agent-bg:  #1F1F1D;
+  --wdp-panel-bg:  #161614;
+}
+
+/* Accent presets */
+[data-accent="lime"]       { --wdp-accent:#D7FF10; --wdp-accent-dim:rgba(215,255,16,0.14);   --wdp-accent-txt:#111110; }
+[data-accent="terracotta"] { --wdp-accent:#C27A54; --wdp-accent-dim:rgba(194,122,84,0.14);   --wdp-accent-txt:#FFFFFF; }
+[data-accent="mint"]       { --wdp-accent:#80E6A6; --wdp-accent-dim:rgba(128,230,166,0.16);  --wdp-accent-txt:#111110; }
+[data-accent="teal"]       { --wdp-accent:#78B7C5; --wdp-accent-dim:rgba(120,183,197,0.18);  --wdp-accent-txt:#FFFFFF; }
+[data-accent="sage"]       { --wdp-accent:#9BAE9A; --wdp-accent-dim:rgba(155,174,154,0.20);  --wdp-accent-txt:#2C2C2C; }
+[data-accent="candy"]      { --wdp-accent:#F8AFA8; --wdp-accent-dim:rgba(248,175,168,0.18);  --wdp-accent-txt:#2C2C2C; }
+[data-accent="butter"]     { --wdp-accent:#F0D77A; --wdp-accent-dim:rgba(240,215,122,0.20);  --wdp-accent-txt:#2C2C2C; }
+
 @layer utilities {
 
   /* Standard page scroll area — constrained width + generous breathing room */
