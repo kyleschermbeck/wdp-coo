@@ -404,8 +404,8 @@ function OrderDetailDrawer({
       />
       {/* Drawer */}
       <div
-        className="fixed right-0 top-0 bottom-0 z-50 flex flex-col bg-white shadow-2xl overflow-y-auto"
-        style={{ width: 'min(420px, 100vw)', borderLeft: '1px solid rgba(216,210,198,0.6)' }}
+        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white shadow-2xl overflow-y-auto bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]"
+        style={{ borderTop: '1px solid rgba(216,210,198,0.6)' }}
       >
         {/* Header */}
         <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(216,210,198,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -1215,7 +1215,7 @@ function IgPostSidebar({ mediaId, onClose, followerCount }: { mediaId: string; o
   return (
     <>
       <div className="fixed inset-0 z-40 bg-ink/10 backdrop-blur-[1px]" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-[420px] bg-white shadow-2xl flex flex-col">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-2xl flex flex-col bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]">
 
         {/* Header */}
         <div className="px-6 py-5 border-b border-mushroom/40 flex items-center justify-between shrink-0">
@@ -1447,7 +1447,7 @@ function IgStorySidebar({ storyId, onClose }: { storyId: string; onClose: () => 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-ink/10 backdrop-blur-[1px]" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-[380px] bg-white shadow-2xl flex flex-col">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-2xl flex flex-col bottom-sheet-wrap md:top-0 md:left-auto md:w-[380px]">
 
         {/* Header */}
         <div className="px-6 py-5 border-b border-mushroom/40 flex items-center justify-between shrink-0">
@@ -2579,7 +2579,7 @@ function KlaviyoDetailSidebar({
         onClick={onClose}
       />
       {/* Panel */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-[420px] bg-white shadow-2xl flex flex-col">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-2xl flex flex-col bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]">
         {/* Header */}
         <div className="px-6 py-5 border-b border-mushroom/40 flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -5459,7 +5459,7 @@ function EventSidebar({
       <div className="fixed inset-0 z-40 bg-ink/10 backdrop-blur-[1px]" onClick={onClose} />
 
       {/* Panel — stopPropagation prevents clicks here from bubbling to CalendarTab's closeAll handler */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-[400px] bg-white shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-2xl flex flex-col bottom-sheet-wrap md:top-0 md:left-auto md:w-[400px]" onClick={e => e.stopPropagation()}>
 
         {/* Header */}
         <div className="px-6 py-5 border-b border-mushroom/40 flex items-start justify-between gap-3 shrink-0">
@@ -6472,7 +6472,7 @@ function ContentStrategyTab() {
             className="fixed inset-0 z-40"
             onClick={() => setPendingIdea(null)}
           />
-          <div className="fixed right-0 top-0 bottom-0 z-50 w-[400px] bg-white shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-2xl flex flex-col bottom-sheet-wrap md:top-0 md:left-auto md:w-[400px]" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="px-6 py-5 border-b border-mushroom/40 flex items-center justify-between">
               <p className="text-sm font-semibold text-ink-dark" style={{ fontFamily: FONT }}>Review Task</p>

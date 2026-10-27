@@ -543,7 +543,7 @@ function ProductPanel({
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ background: 'rgba(116,116,116,0.25)' }} onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col bg-white shadow-2xl" style={{ width: 'min(420px, 100vw)' }}>
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white shadow-2xl bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]">
         {/* Header */}
         <div style={{ padding: '22px 24px', borderBottom: '1px solid rgba(216,210,198,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -1230,7 +1230,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
     {showAddPanel && (
       <>
         <div className="fixed inset-0 z-40" style={{ background: 'rgba(116,116,116,0.25)' }} onClick={() => { setShowAddPanel(false); setForm(EMPTY_FORM) }} />
-        <div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col bg-white shadow-2xl" style={{ width: 'min(400px, 100vw)' }}>
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white shadow-2xl bottom-sheet-wrap md:top-0 md:left-auto md:w-[400px]">
           <div style={{ padding: '22px 24px', borderBottom: '1px solid rgba(216,210,198,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 4px', ...FONT }}>New supply</p>
@@ -1507,7 +1507,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
         return (
           <>
             <div className="fixed inset-0 z-40" style={{ background: 'rgba(44,44,44,0.22)' }} onClick={() => { setSidebarSupplyId(null); setEditId(null) }} />
-            <div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col" style={{ width: 'min(420px, 100vw)', background: '#fff', boxShadow: '-2px 0 32px rgba(44,44,44,0.14)' }}>
+            <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]" style={{ background: '#fff', boxShadow: '0 -4px 32px rgba(44,44,44,0.14)' }}>
 
               {/* Header band */}
               <div style={{ background: '#2C2C2C', padding: '26px 28px 22px', position: 'relative' }}>
@@ -1724,7 +1724,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
         return (
           <>
             <div className="fixed inset-0 z-40" style={{ background: 'rgba(44,44,44,0.22)' }} onClick={() => setOrderSidebarId(null)} />
-            <div className="fixed right-0 top-0 bottom-0 z-50" style={{ width: 'min(420px, 100vw)', background: '#FAF9F6', boxShadow: '-4px 0 32px rgba(44,44,44,0.13)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col overflow-y-auto bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]" style={{ background: '#FAF9F6', boxShadow: '0 -4px 32px rgba(44,44,44,0.13)' }}>
               <div style={{ background: '#2C2C2C', padding: '26px 28px 22px', position: 'relative' }}>
                 <button onClick={() => setOrderSidebarId(null)} style={{ position: 'absolute', top: 18, right: 18, background: 'none', border: 'none', color: 'rgba(250,249,246,0.5)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(250,249,246,0.5)', marginBottom: 6, ...FONT }}>{order.vendor}</div>
@@ -2249,7 +2249,7 @@ function OrderSidebar({ orderNumber, onClose }: { orderNumber: number; onClose: 
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ background: 'rgba(116,116,116,0.25)' }} onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col bg-white shadow-2xl" style={{ width: 'min(400px, 100vw)' }}>
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white shadow-2xl bottom-sheet-wrap md:top-0 md:left-auto md:w-[400px]">
         {/* Header */}
         <div style={{ padding: '22px 24px', borderBottom: '1px solid rgba(216,210,198,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -2393,7 +2393,7 @@ function BlendRecipeSidebar({ blend, shopifyId, canFill, jarsNeeded, onClose }: 
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ background: 'rgba(116,116,116,0.25)' }} onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col bg-white shadow-2xl" style={{ width: 'min(420px, 100vw)' }}>
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white shadow-2xl bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]">
         <div style={{ padding: '22px 24px', borderBottom: '1px solid rgba(216,210,198,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 4px', ...FONT }}>Blend recipe</p>
@@ -3655,7 +3655,7 @@ export default function InventoryPage() {
       {manualOrderFor && (
         <>
           <div className="fixed inset-0 z-40" style={{ background: 'rgba(116,116,116,0.25)' }} onClick={() => { setManualOrderFor(null); setManualOrderDupes(null) }} />
-          <div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col bg-white shadow-2xl" style={{ width: 'min(380px, 100vw)' }}>
+          <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white shadow-2xl bottom-sheet-wrap md:top-0 md:left-auto md:w-[380px]">
             <div style={{ padding: '22px 24px', borderBottom: '1px solid rgba(216,210,198,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 4px', ...FONT }}>Manual entry</p>

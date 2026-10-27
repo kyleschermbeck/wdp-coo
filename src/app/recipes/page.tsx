@@ -1112,8 +1112,12 @@ function RecipeLabPage() {
                 }).filter(s => s.body)
                 const seoSection = noteSections.find(s => s.header === 'SEO Heading' || s.header === 'SEO Excerpt')
                 const hasSeo = noteSections.some(s => s.header === 'SEO Heading' || s.header === 'SEO Excerpt')
+                const closeDetail = () => { setSelectedCard(null); setConfirmDeleteId(null); setRegenCardId(null); setRegenFeedback('') }
                 return (
-                  <div className="flex flex-col overflow-hidden min-h-0 w-full md:w-[60%]" style={{ background: 'var(--wdp-surface)' }}>
+                  <>
+                  {/* Mobile backdrop */}
+                  <div className="md:hidden fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={closeDetail} />
+                  <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bottom-sheet-wrap md:relative md:bottom-auto md:left-auto md:right-auto md:z-0 md:w-[60%] md:min-h-0 overflow-hidden" style={{ background: 'var(--wdp-surface)' }}>
                     {/* Detail header */}
                     <div className="px-6 pt-4 pb-0" style={{ borderBottom: '1px solid var(--wdp-border)' }}>
                       {/* Top bar: regen + close */}
@@ -1134,7 +1138,7 @@ function RecipeLabPage() {
                           <span>Regenerate</span>
                         </button>
                         <button
-                          onClick={() => { setSelectedCard(null); setConfirmDeleteId(null); setRegenCardId(null); setRegenFeedback('') }}
+                          onClick={closeDetail}
                           className="text-ink/30 hover:text-ink/70 transition-colors cursor-pointer p-1 rounded hover:bg-mushroom/30"
                           title="Close"
                         >
@@ -1496,6 +1500,7 @@ function RecipeLabPage() {
                       )}
                     </div>
                   </div>
+                  </>
                 )
               })()}
             </>
