@@ -1356,7 +1356,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
         <div style={{ marginBottom: 8 }}>
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: 0, ...FONT }}>Ingredient Stock Levels</p>
         </div>
-        <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
+        <div className="mob-tbl" style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#FBF0E3' }}>
@@ -1407,7 +1407,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                         </button>
                       </div>
                     </td>
-                    <td style={TD} onClick={e => e.stopPropagation()}>
+                    <td data-label="Containers" style={TD} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <input
                           type="number"
@@ -1422,15 +1422,15 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                         <span style={{ fontSize: 11.5, color: '#747474', ...FONT }}>containers</span>
                       </div>
                     </td>
-                    <td style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
+                    <td data-label="Tbsp/Container" style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
                       {sl.missing_data
                         ? <span style={{ color: '#C27A54', fontSize: 11.5 }}>⚠ Not calibrated</span>
                         : sl.tbsp_per_container != null ? sl.tbsp_per_container.toFixed(1) : '—'}
                     </td>
-                    <td style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
+                    <td data-label="Tbsp Available" style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
                       {sl.tbsp_on_hand != null ? sl.tbsp_on_hand.toFixed(1) : '—'}
                     </td>
-                    <td style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
+                    <td data-label="Tbsp Needed" style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
                       {sl.tbsp_needed > 0 ? (
                         <button
                           onClick={() => onTbspBreakdown(sl.id)}
@@ -1440,7 +1440,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                         </button>
                       ) : '—'}
                     </td>
-                    <td style={TD}>
+                    <td data-label="Status" style={TD}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span style={{
                           display: 'inline-block', fontSize: 11, fontWeight: 700,
@@ -1815,7 +1815,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
       {packagingLevels && packagingLevels.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 8px', ...FONT }}>Jar & Label Inventory</p>
-          <div style={{ background: '#fff', border: '1px solid rgba(120,183,197,0.35)', borderRadius: 12, overflow: 'hidden' }}>
+          <div className="mob-tbl" style={{ background: '#fff', border: '1px solid rgba(120,183,197,0.35)', borderRadius: 12, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'rgba(120,183,197,0.10)' }}>
@@ -1860,7 +1860,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                           </button>
                         </div>
                       </td>
-                      <td style={TD} onClick={e => e.stopPropagation()}>
+                      <td data-label="Units on Hand" style={TD} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <input
                             type="number"
@@ -1895,10 +1895,10 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                           <span style={{ fontSize: 11.5, color: '#747474', ...FONT }}>units</span>
                         </div>
                       </td>
-                      <td style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
+                      <td data-label="Units Needed" style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
                         {pl.units_needed > 0 ? pl.units_needed : '—'}
                       </td>
-                      <td style={TD}>
+                      <td data-label="Status" style={TD}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: `${statusColor}18`, color: statusColor }}>
                             {statusLabel}
@@ -1943,7 +1943,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                 </button>
               )}
             </div>
-            <div style={{ background: '#fff', border: '1px solid rgba(120,183,197,0.35)', borderRadius: 12, overflow: 'hidden' }}>
+            <div className="mob-tbl" style={{ background: '#fff', border: '1px solid rgba(120,183,197,0.35)', borderRadius: 12, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'rgba(120,183,197,0.10)' }}>
@@ -1982,7 +1982,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                           <div style={{ fontWeight: 600, color: row.excluded ? '#747474' : '#2C2C2C' }}>{row.title}</div>
                           {row.excluded && <div style={{ fontSize: 10, color: '#a0a0a0', ...FONT }}>excluded from labels</div>}
                         </td>
-                        <td style={TD} onClick={e => e.stopPropagation()}>
+                        <td data-label="Labels on Hand" style={TD} onClick={e => e.stopPropagation()}>
                           {!row.excluded && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <input
@@ -1999,10 +1999,10 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                             </div>
                           )}
                         </td>
-                        <td style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
+                        <td data-label="Labels Needed" style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
                           {!row.excluded && (row.units_needed > 0 ? row.units_needed : '—')}
                         </td>
-                        <td style={TD}>
+                        <td data-label="Status" style={TD}>
                           {!row.excluded && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                               <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: `${statusColor}18`, color: statusColor }}>
@@ -2052,7 +2052,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
 
       {/* Packaging supplies table */}
       <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 8px', ...FONT }}>Packaging Supplies</p>
-      <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
+      <div className="mob-tbl" style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'rgba(120,183,197,0.12)' }}>
@@ -2094,16 +2094,16 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
               return (
                 <tr key={s.id} style={{ borderTop: '1px solid rgba(216,210,198,0.35)', opacity: s.active ? 1 : 0.5 }}>
                   <td style={TD}><span style={{ fontWeight: 600 }}>{s.name}</span></td>
-                  <td style={{ ...TD, color: '#747474' }}>{s.vendor ?? '—'}</td>
-                  <td style={TD}>
+                  <td data-label="Vendor" style={{ ...TD, color: '#747474' }}>{s.vendor ?? '—'}</td>
+                  <td data-label="Order Link" style={TD}>
                     {s.order_url
                       ? <a href={s.order_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, color: '#3d7684', textDecoration: 'none', ...FONT }}>Order ↗</a>
                       : <span style={{ color: '#747474' }}>—</span>}
                   </td>
-                  <td style={TD}>{s.total_servings ? s.total_servings.toLocaleString() : '—'}</td>
-                  <td style={TD}>{s.package_cost != null ? `$${s.package_cost.toFixed(2)}` : '—'}</td>
-                  <td style={{ ...TD, fontWeight: 700, color: '#3d7684' }}>{cpu != null ? `$${cpu.toFixed(2)}` : '—'}</td>
-                  <td style={{ ...TD, textAlign: 'center' }}>
+                  <td data-label="Units" style={TD}>{s.total_servings ? s.total_servings.toLocaleString() : '—'}</td>
+                  <td data-label="Total Cost" style={TD}>{s.package_cost != null ? `$${s.package_cost.toFixed(2)}` : '—'}</td>
+                  <td data-label="Cost/Unit" style={{ ...TD, fontWeight: 700, color: '#3d7684' }}>{cpu != null ? `$${cpu.toFixed(2)}` : '—'}</td>
+                  <td data-label="Active" style={{ ...TD, textAlign: 'center' }}>
                     <input type="checkbox" checked={!!s.active} onChange={() => toggleActive(s)} style={{ width: 15, height: 15, accentColor: '#2C2C2C', cursor: 'pointer' }} />
                   </td>
                   <td style={{ ...TD, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -3003,7 +3003,7 @@ export default function InventoryPage() {
               cursor: 'pointer', marginBottom: -1, display: 'flex', alignItems: 'center', gap: 6,
             }}
           >
-            Pack Queue
+            Queue
             {packQueue && packQueue.totalJars > 0 && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'rgba(194,122,84,0.15)', color: '#C27A54' }}>
                 {packQueue.totalJars}
@@ -3133,33 +3133,36 @@ export default function InventoryPage() {
             </div>
           ) : (
             <div>
-              {/* Summary strip */}
-              <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                {/* Unfulfilled jars card with ready-to-fulfill tag */}
-                {(() => {
-                  const readyJars = ordersAnalysis ? ordersAnalysis.reduce((s, o) => s + o.totalCanFill, 0) : 0
-                  return (
-                    <div style={{ flex: '1 1 140px', background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 10, padding: '14px 18px' }}>
-                      <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 5px', ...FONT }}>Unfulfilled jars</p>
-                      <p style={{ fontSize: 26, fontWeight: 700, color: '#C27A54', margin: '0 0 8px', fontVariantNumeric: 'tabular-nums', ...FONT }}>{packQueue.totalJars}</p>
-                      {readyJars > 0 && (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(92,138,63,0.12)', color: '#5c8a3f', ...FONT }}>
-                          {readyJars} ready to fill
-                        </span>
-                      )}
+              {/* Summary strip — 3 KPI cards always in one row */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  {/* Unfulfilled jars */}
+                  {(() => {
+                    const readyJars = ordersAnalysis ? ordersAnalysis.reduce((s, o) => s + o.totalCanFill, 0) : 0
+                    return (
+                      <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 10, padding: '12px 14px' }}>
+                        <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 4px', ...FONT }}>Unfulfilled</p>
+                        <p style={{ fontSize: 24, fontWeight: 700, color: '#C27A54', margin: '0 0 6px', fontVariantNumeric: 'tabular-nums', ...FONT }}>{packQueue.totalJars}</p>
+                        {readyJars > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: 'rgba(92,138,63,0.12)', color: '#5c8a3f', ...FONT }}>
+                            {readyJars} ready
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                  {[
+                    { label: 'Open orders', value: packQueue.openOrderCount, color: '#2C2C2C' },
+                    { label: 'Blends', value: packQueue.rows.filter(r => r.jars > 0).length, color: '#2C2C2C' },
+                  ].map(stat => (
+                    <div key={stat.label} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 10, padding: '12px 14px' }}>
+                      <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 4px', ...FONT }}>{stat.label}</p>
+                      <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0, fontVariantNumeric: 'tabular-nums', ...FONT }}>{stat.value}</p>
                     </div>
-                  )
-                })()}
-                {[
-                  { label: 'Open orders', value: packQueue.openOrderCount, color: '#2C2C2C' },
-                  { label: 'Blends needed', value: packQueue.rows.filter(r => r.jars > 0).length, color: '#2C2C2C' },
-                ].map(stat => (
-                  <div key={stat.label} style={{ flex: '1 1 140px', background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 10, padding: '14px 18px' }}>
-                    <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', margin: '0 0 5px', ...FONT }}>{stat.label}</p>
-                    <p style={{ fontSize: 26, fontWeight: 700, color: stat.color, margin: 0, fontVariantNumeric: 'tabular-nums', ...FONT }}>{stat.value}</p>
-                  </div>
-                ))}
-                <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingTop: 4 }}>
+                  ))}
+                </div>
+                {/* Reset action */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   {resetConfirm ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: '#fff', border: '1px solid rgba(194,122,84,0.4)', borderRadius: 10, padding: '12px 14px' }}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: '#2C2C2C', margin: 0, ...FONT }}>Reset all stock to −orders?</p>
@@ -3184,7 +3187,7 @@ export default function InventoryPage() {
                     <button
                       onClick={() => setResetConfirm(true)}
                       disabled={resetting}
-                      style={{ fontSize: 12, fontWeight: 600, padding: '10px 16px', borderRadius: 10, background: '#fff', color: '#747474', border: '1px solid rgba(216,210,198,0.6)', cursor: 'pointer', ...FONT, whiteSpace: 'nowrap' }}
+                      style={{ fontSize: 12, fontWeight: 600, padding: '8px 14px', borderRadius: 8, background: '#fff', color: '#747474', border: '1px solid rgba(216,210,198,0.6)', cursor: 'pointer', ...FONT, whiteSpace: 'nowrap' }}
                     >
                       {resetting ? 'Resetting…' : 'Reset stock counts'}
                     </button>
@@ -3192,18 +3195,12 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              {/* Blend table */}
-              <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden', overflowX: 'auto' }}>
-                <div style={{ minWidth: 860, display: 'grid', gridTemplateColumns: '3fr 56px 56px 56px 56px 56px 130px 150px 150px', background: '#FAF9F6', borderBottom: '1px solid rgba(216,210,198,0.5)' }}>
-                  {['Blend', 'Needed', 'On Hand', 'Labeled', 'To Pack', 'Build', 'Orders', 'Log labeling', 'Log packed'].map(h => (
-                    <div key={h} style={{ padding: '10px 16px', fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: h === 'Build' ? 'rgba(61,118,132,0.7)' : 'rgba(116,116,116,0.6)', ...FONT }}>{h}</div>
-                  ))}
-                </div>
-                {packQueue.rows.map((row, i) => {
+              {/* Blend cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {packQueue.rows.map((row) => {
                   const sid = row.shopifyId
                   const product = products.find(p => p.shopify_id === sid)
                   const inventoryQty = product ? product.shopify_qty : 0
-                  // packed = jars produced so far (reset baseline: inventory starts at -needed)
                   const packed = Math.max(0, row.jars + inventoryQty)
                   const labeled = row.labeledJars ?? 0
                   const toPack = Math.max(0, row.jars - packed)
@@ -3212,142 +3209,92 @@ export default function InventoryPage() {
                   const onHandColor = packed > 0 ? '#5c8a3f' : 'rgba(116,116,116,0.5)'
                   const labeledColor = labeled > 0 ? '#3d7684' : 'rgba(116,116,116,0.5)'
                   const toPackColor = toPack > 0 ? '#C94040' : '#5c8a3f'
+                  const suggested = fillPlan?.recommendations.find(r => r.shopifyId === sid)?.suggestedFill ?? 0
+                  const dotColor = row.fullyFillable ? '#5c8a3f' : row.fillableNow > 0 ? '#C27A54' : '#9a3a3a'
+                  const tip = row.fullyFillable
+                    ? `Can fill all ${row.jars > 0 ? `${row.jars} ordered` : `${row.labeledJars} labeled`} jars`
+                    : row.fillableNow > 0
+                      ? `Can fill ${Math.min(row.fillableNow, row.jars || row.labeledJars)} of ${row.jars || row.labeledJars}${row.limitingIngredient ? ` — limited by ${row.limitingIngredient}` : ''}`
+                      : `Blocked${row.limitingIngredient ? ` — low on ${row.limitingIngredient}` : ''}`
                   return (
-                    <div
-                      key={row.blend}
-                      style={{
-                        minWidth: 860,
-                        display: 'grid', gridTemplateColumns: '3fr 56px 56px 56px 56px 56px 130px 150px 150px',
-                        borderBottom: i < packQueue.rows.length - 1 ? '1px solid rgba(216,210,198,0.4)' : 'none',
-                        background: i % 2 === 0 ? '#fff' : '#FAFAF8',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <button
-                          onClick={() => setSelectedBlend({ blend: row.blend, shopifyId: row.shopifyId, canFill: row.canFill, jarsNeeded: row.jars })}
-                          style={{ fontSize: 13.5, fontWeight: 500, color: '#2C2C2C', ...FONT, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', textDecoration: 'underline', textDecorationColor: 'rgba(44,44,44,0.25)', textUnderlineOffset: 3, flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        >{row.blend}</button>
-                        {(row.jars > 0 || row.labeledJars > 0) && (() => {
-                          const dotColor = row.fullyFillable ? '#5c8a3f' : row.fillableNow > 0 ? '#C27A54' : '#9a3a3a'
-                          const tip = row.fullyFillable
-                            ? `Can fill all ${row.jars > 0 ? `${row.jars} ordered` : `${row.labeledJars} labeled`} jars`
-                            : row.fillableNow > 0
-                              ? `Can fill ${Math.min(row.fillableNow, row.jars || row.labeledJars)} of ${row.jars || row.labeledJars}${row.limitingIngredient ? ` — limited by ${row.limitingIngredient}` : ''}`
-                              : `Blocked${row.limitingIngredient ? ` — low on ${row.limitingIngredient}` : ''}`
-                          return (
+                    <div key={row.blend} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
+                      {/* Card header */}
+                      <div style={{ padding: '12px 16px 10px', borderBottom: '1px solid rgba(216,210,198,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <button
+                            onClick={() => setSelectedBlend({ blend: row.blend, shopifyId: row.shopifyId, canFill: row.canFill, jarsNeeded: row.jars })}
+                            style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C', ...FONT, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >{row.blend}</button>
+                          {(row.jars > 0 || row.labeledJars > 0) && (
                             <span title={tip} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0, display: 'inline-block' }} />
-                          )
-                        })()}
-                      </div>
-                      <div style={{ padding: '13px 16px', fontSize: 15, fontWeight: 700, color: '#C27A54', fontVariantNumeric: 'tabular-nums', ...FONT }}>{row.jars}</div>
-                      <div style={{ padding: '13px 16px', fontSize: 15, fontWeight: 700, color: onHandColor, fontVariantNumeric: 'tabular-nums', ...FONT }}>{packed}</div>
-                      <div style={{ padding: '13px 16px', fontSize: 15, fontWeight: 700, color: labeledColor, fontVariantNumeric: 'tabular-nums', ...FONT }}>{labeled > 0 ? labeled : '—'}</div>
-                      <div style={{ padding: '13px 16px', fontSize: 15, fontWeight: 700, color: toPackColor, fontVariantNumeric: 'tabular-nums', ...FONT }}>{toPack}</div>
-                      <div style={{ padding: '13px 16px', fontVariantNumeric: 'tabular-nums', ...FONT }}>
-                        {(() => {
-                          const suggested = fillPlan?.recommendations.find(r => r.shopifyId === sid)?.suggestedFill ?? 0
-                          return suggested > 0
-                            ? <span style={{ fontSize: 15, fontWeight: 700, color: '#3d7684' }}>{suggested}</span>
-                            : <span style={{ fontSize: 13, color: 'rgba(116,116,116,0.4)' }}>—</span>
-                        })()}
-                      </div>
-                      <div style={{ padding: '13px 16px', fontSize: 12, color: '#747474', ...FONT }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {row.orderNumbers.map(num => (
                             <button
                               key={num}
                               onClick={() => setSelectedOrder(num)}
-                              style={{
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
-                                background: 'rgba(61,118,132,0.1)', color: '#3d7684',
-                                border: '1px solid rgba(61,118,132,0.2)',
-                                cursor: 'pointer', ...FONT,
-                              }}
-                            >
-                              #{num}
-                            </button>
+                              style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: 'rgba(61,118,132,0.1)', color: '#3d7684', border: '1px solid rgba(61,118,132,0.2)', cursor: 'pointer', ...FONT }}
+                            >#{num}</button>
                           ))}
                         </div>
                       </div>
-                      <div style={{ padding: '8px 16px' }}>
-                        {sid ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+
+                      {/* Stats row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 0, borderBottom: '1px solid rgba(216,210,198,0.4)' }}>
+                        {[
+                          { label: 'Needed', value: row.jars, color: '#C27A54' },
+                          { label: 'On Hand', value: packed, color: onHandColor },
+                          { label: 'Labeled', value: labeled > 0 ? labeled : '—', color: labeledColor },
+                          { label: 'To Pack', value: toPack, color: toPackColor },
+                          { label: 'Build', value: suggested > 0 ? suggested : '—', color: suggested > 0 ? '#3d7684' : 'rgba(116,116,116,0.35)' },
+                        ].map((s, i) => (
+                          <div key={s.label} style={{ padding: '10px 0 10px', textAlign: 'center', borderRight: i < 4 ? '1px solid rgba(216,210,198,0.4)' : 'none' }}>
+                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.55)', marginBottom: 3, ...FONT }}>{s.label}</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: s.color, fontVariantNumeric: 'tabular-nums', ...FONT }}>{s.value}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Actions row */}
+                      {sid && (
+                        <div style={{ padding: '10px 16px', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          {/* Log labeling */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 160px' }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(116,116,116,0.55)', flexShrink: 0, ...FONT }}>Label</span>
                             <input
-                              type="number" step="1"
-                              placeholder="0"
+                              type="number" step="1" placeholder="0"
                               value={labelingQtys[sid] ?? ''}
                               onChange={e => setLabelingQtys(prev => ({ ...prev, [sid]: e.target.value }))}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  const qty = parseInt((e.currentTarget as HTMLInputElement).value)
-                                  if (qty !== 0 && !isNaN(qty)) logLabeling(sid, qty)
-                                }
-                              }}
-                              style={{ width: 56, fontSize: 12.5, ...FONT, border: '1px solid #D8D2C6', borderRadius: 6, padding: '5px 8px', outline: 'none', textAlign: 'right' }}
+                              onKeyDown={e => { if (e.key === 'Enter') { const qty = parseInt((e.currentTarget as HTMLInputElement).value); if (qty !== 0 && !isNaN(qty)) logLabeling(sid, qty) } }}
+                              style={{ width: 60, fontSize: 13, ...FONT, border: '1px solid #D8D2C6', borderRadius: 6, padding: '5px 8px', outline: 'none', textAlign: 'right' }}
                             />
                             <span style={{ fontSize: 11, color: '#747474', ...FONT }}>jars</span>
                             <button
                               disabled={!labelingQtys[sid] || !!isLabeling}
-                              onClick={() => {
-                                const qty = parseInt(labelingQtys[sid] ?? '0')
-                                if (qty !== 0 && !isNaN(qty)) logLabeling(sid, qty)
-                              }}
-                              style={{
-                                fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
-                                background: labelingQtys[sid] && !isLabeling ? '#3d7684' : '#D8D2C6',
-                                color: labelingQtys[sid] && !isLabeling ? '#FAF9F6' : '#747474',
-                                border: 'none', cursor: labelingQtys[sid] ? 'pointer' : 'default', ...FONT,
-                                transition: 'background 0.15s',
-                              }}
-                            >
-                              {isLabeling ? '…' : 'Log'}
-                            </button>
+                              onClick={() => { const qty = parseInt(labelingQtys[sid] ?? '0'); if (qty !== 0 && !isNaN(qty)) logLabeling(sid, qty) }}
+                              style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, background: labelingQtys[sid] && !isLabeling ? '#3d7684' : '#D8D2C6', color: labelingQtys[sid] && !isLabeling ? '#FAF9F6' : '#747474', border: 'none', cursor: labelingQtys[sid] ? 'pointer' : 'default', ...FONT, transition: 'background 0.15s' }}
+                            >{isLabeling ? '…' : 'Log'}</button>
                           </div>
-                        ) : <span style={{ fontSize: 11, color: 'rgba(116,116,116,0.4)', ...FONT }}>—</span>}
-                      </div>
-                      <div style={{ padding: '8px 16px' }}>
-                        {sid ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {/* Log packed */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 160px' }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(116,116,116,0.55)', flexShrink: 0, ...FONT }}>Pack</span>
                             <input
-                              type="number" min="1" step="1"
-                              placeholder="0"
+                              type="number" min="1" step="1" placeholder="0"
                               value={packedQtys[sid] ?? ''}
                               onChange={e => setPackedQtys(prev => ({ ...prev, [sid]: e.target.value }))}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  const qty = parseInt((e.currentTarget as HTMLInputElement).value)
-                                  if (qty > 0) {
-                                    if (row.orderBreakdown.length > 0) openPackConfirm(sid, row.blend, qty, row.orderBreakdown)
-                                    else recordPacked(sid, row.blend, qty)
-                                  }
-                                }
-                              }}
-                              style={{ width: 56, fontSize: 12.5, ...FONT, border: '1px solid #D8D2C6', borderRadius: 6, padding: '5px 8px', outline: 'none', textAlign: 'right' }}
+                              onKeyDown={e => { if (e.key === 'Enter') { const qty = parseInt((e.currentTarget as HTMLInputElement).value); if (qty > 0) { if (row.orderBreakdown.length > 0) openPackConfirm(sid, row.blend, qty, row.orderBreakdown); else recordPacked(sid, row.blend, qty) } } }}
+                              style={{ width: 60, fontSize: 13, ...FONT, border: '1px solid #D8D2C6', borderRadius: 6, padding: '5px 8px', outline: 'none', textAlign: 'right' }}
                             />
                             <span style={{ fontSize: 11, color: '#747474', ...FONT }}>jars</span>
                             <button
                               disabled={!packedQtys[sid] || isPacking}
-                              onClick={() => {
-                                const qty = parseInt(packedQtys[sid] ?? '0')
-                                if (qty > 0) {
-                                  if (row.orderBreakdown.length > 0) openPackConfirm(sid, row.blend, qty, row.orderBreakdown)
-                                  else recordPacked(sid, row.blend, qty)
-                                }
-                              }}
-                              style={{
-                                fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
-                                background: packedQtys[sid] && !isPacking ? '#2C2C2C' : '#D8D2C6',
-                                color: packedQtys[sid] && !isPacking ? '#FAF9F6' : '#747474',
-                                border: 'none', cursor: packedQtys[sid] ? 'pointer' : 'default', ...FONT,
-                                transition: 'background 0.15s',
-                              }}
-                            >
-                              {isPacking ? '…' : 'Log'}
-                            </button>
+                              onClick={() => { const qty = parseInt(packedQtys[sid] ?? '0'); if (qty > 0) { if (row.orderBreakdown.length > 0) openPackConfirm(sid, row.blend, qty, row.orderBreakdown); else recordPacked(sid, row.blend, qty) } }}
+                              style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6, background: packedQtys[sid] && !isPacking ? '#2C2C2C' : '#D8D2C6', color: packedQtys[sid] && !isPacking ? '#FAF9F6' : '#747474', border: 'none', cursor: packedQtys[sid] ? 'pointer' : 'default', ...FONT, transition: 'background 0.15s' }}
+                            >{isPacking ? '…' : 'Log'}</button>
                           </div>
-                        ) : <span style={{ fontSize: 11, color: 'rgba(116,116,116,0.4)', ...FONT }}>—</span>}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -3401,44 +3348,43 @@ export default function InventoryPage() {
                     </div>
 
                     {/* Items */}
-                    <div style={{ padding: '0 18px', overflowX: 'auto' }}>
+                    <div style={{ padding: '4px 0' }}>
                       {order.items.map((item, j) => {
                         const fillable = item.canFill === item.needed
                         const short = item.short > 0
                         return (
-                          <div key={j} style={{ minWidth: 480, display: 'grid', gridTemplateColumns: '1fr 60px 100px 70px 80px 80px', alignItems: 'center', padding: '11px 0', borderBottom: j < order.items.length - 1 ? '1px solid rgba(216,210,198,0.3)' : 'none', gap: 8 }}>
-                            <div style={{ ...FONT, fontSize: 13, fontWeight: 500, color: '#2C2C2C' }}>{item.title}</div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 10, color: 'rgba(116,116,116,0.5)', ...FONT }}>needed</div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C', ...FONT }}>{item.needed}</div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 10, color: 'rgba(116,116,116,0.5)', ...FONT }}>on hand</div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: item.onHand > 0 ? '#5c8a3f' : '#C27A54', ...FONT }}>
-                                {item.onHand}
+                          <div key={j} style={{ padding: '10px 18px', borderBottom: j < order.items.length - 1 ? '1px solid rgba(216,210,198,0.3)' : 'none' }}>
+                            {/* Title row */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                              <div style={{ ...FONT, fontSize: 13, fontWeight: 500, color: '#2C2C2C', minWidth: 0, flex: 1 }}>{item.title}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                {short ? (
+                                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(194,122,84,0.12)', color: '#C27A54', ...FONT }}>
+                                    -{item.short} short
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(92,138,63,0.1)', color: '#5c8a3f', ...FONT }}>
+                                    ✓ good
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 10, color: 'rgba(116,116,116,0.5)', ...FONT }}>can fill</div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: fillable ? '#5c8a3f' : '#C27A54', ...FONT }}>{item.canFill}</div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              {short && (
-                                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(194,122,84,0.12)', color: '#C27A54', ...FONT }}>
-                                  -{item.short} short
-                                </span>
-                              )}
-                              {!short && (
-                                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(92,138,63,0.1)', color: '#5c8a3f', ...FONT }}>
-                                  ✓ good
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
+                            {/* Stats + action row */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                              {[
+                                { label: 'Needed', val: item.needed, color: '#2C2C2C' },
+                                { label: 'On hand', val: item.onHand, color: item.onHand > 0 ? '#5c8a3f' : '#C27A54' },
+                                { label: 'Can fill', val: item.canFill, color: fillable ? '#5c8a3f' : '#C27A54' },
+                              ].map(s => (
+                                <div key={s.label} style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                                  <span style={{ fontSize: 10, color: 'rgba(116,116,116,0.5)', ...FONT }}>{s.label}</span>
+                                  <span style={{ fontSize: 13, fontWeight: 700, color: s.color, fontVariantNumeric: 'tabular-nums', ...FONT }}>{s.val}</span>
+                                </div>
+                              ))}
                               {item.canFill > 0 && (
                                 <button
                                   onClick={() => setReassignModal({ productId: item.productId, title: item.title, fromOrderNumber: order.orderNumber, fromCanFill: item.canFill, toOrderNumber: null, qty: item.canFill })}
-                                  style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(116,116,116,0.3)', background: 'transparent', color: '#747474', cursor: 'pointer', ...FONT }}
+                                  style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(116,116,116,0.3)', background: 'transparent', color: '#747474', cursor: 'pointer', ...FONT, marginLeft: 'auto' }}
                                 >
                                   Reassign
                                 </button>

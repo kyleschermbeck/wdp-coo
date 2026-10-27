@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Check, Plus, X, Calendar, GripVertical, AlertCircle, Loader2, ChevronDown } from 'lucide-react'
+import { Check, Plus, X, Calendar, GripVertical, AlertCircle, Loader2, FileText, ChevronDown, ChevronUp } from 'lucide-react'
 import { Task, TaskStatus } from '@/lib/types'
 
 const FONT  = "'Jost', system-ui, sans-serif"
@@ -68,7 +68,7 @@ function QuickAdd({ onAdd }: { onAdd: (title: string, priority: string, due_date
           onFocus={() => setShowOpts(true)}
           style={{
             flex: 1, border: 'none', outline: 'none', background: 'transparent',
-            fontFamily: FONT, fontSize: 15, color: 'var(--wdp-ink, #2C2C2C)',
+            fontFamily: FONT, fontSize: 16, color: 'var(--wdp-ink, #2C2C2C)',
           }}
         />
         {value.trim() && (
@@ -98,7 +98,7 @@ function QuickAdd({ onAdd }: { onAdd: (title: string, priority: string, due_date
               onChange={e => setDueDate(e.target.value)}
               style={{
                 flex: 1, border: '1px solid var(--wdp-border)', borderRadius: 8,
-                padding: '5px 10px', fontFamily: FONT, fontSize: 13,
+                padding: '5px 10px', fontFamily: FONT, fontSize: 16,
                 color: 'var(--wdp-ink)', background: 'var(--wdp-ground)',
                 outline: 'none',
               }}
@@ -142,28 +142,50 @@ interface TaskCardProps {
   isDragOver: boolean
   onToggle: (t: Task) => void
   onDelete: (id: number) => void
+  onEdit: (id: number, title: string) => void
+  onUpdateNotes: (id: number, notes: string) => void
   onDragStart: (index: number) => void
   onDragOver: (index: number) => void
   onDragEnd: () => void
   onTouchStart: (e: React.TouchEvent, index: number) => void
 }
 
-function TaskCard({ task, index, isDragging, isDragOver, onToggle, onDelete, onDragStart, onDragOver, onDragEnd, onTouchStart }: TaskCardProps) {
+function TaskCard({ task, index, isDragging, isDragOver, onToggle, onDelete, onEdit, onUpdateNotes, onDragStart, onDragOver, onDragEnd, onTouchStart }: TaskCardProps) {
   const done = task.status === 'done'
   const pcolor = PRIORITY_COLOR[task.priority] ?? PRIORITY_COLOR.medium
+  const canDragRef = useRef(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editValue, setEditValue] = useState(task.title)
+  const [showNotes, setShowNotes] = useState(false)
+  const [notesValue, setNotesValue] = useState(task.notes ?? '')
+  const editInputRef = useRef<HTMLInputElement>(null)
+
+  // Sync external title changes
+  useEffect(() => { setEditValue(task.title) }, [task.title])
+  useEffect(() => { setNotesValue(task.notes ?? '') }, [task.notes])
+
+  function commitEdit() {
+    const val = editValue.trim() || task.title
+    setIsEditing(false)
+    if (val !== task.title) onEdit(task.id, val)
+  }
+
+  function commitNotes() {
+    onUpdateNotes(task.id, notesValue)
+  }
 
   return (
     <div
       draggable
-      onDragStart={() => onDragStart(index)}
+      onDragStart={(e) => {
+        if (!canDragRef.current) { e.preventDefault(); return }
+        onDragStart(index)
+      }}
       onDragOver={e => { e.preventDefault(); onDragOver(index) }}
-      onDragEnd={onDragEnd}
-      onTouchStart={e => onTouchStart(e, index)}
+      onDragEnd={() => { canDragRef.current = false; onDragEnd() }}
       style={{
         display: 'flex',
-        alignItems: 'flex-start',
-        gap: 10,
-        padding: '12px 12px 12px 10px',
+        flexDirection: 'column',
         background: 'var(--wdp-surface, #fff)',
         borderRadius: 12,
         border: `1px solid ${isDragOver ? 'var(--wdp-neon, #D7FF10)' : 'var(--wdp-border, rgba(0,0,0,0.08))'}`,
@@ -171,78 +193,148 @@ function TaskCard({ task, index, isDragging, isDragOver, onToggle, onDelete, onD
         opacity: isDragging ? 0.4 : done ? 0.55 : 1,
         transform: isDragOver ? 'scale(1.01)' : 'scale(1)',
         transition: 'opacity 0.15s, transform 0.1s, border-color 0.15s',
-        cursor: 'grab',
         userSelect: 'none',
         WebkitUserSelect: 'none',
       }}
     >
-      {/* Drag handle */}
-      <GripVertical size={14} style={{ color: 'var(--wdp-ink-dim, rgba(44,44,44,0.25))', flexShrink: 0, marginTop: 4, touchAction: 'none' }} />
-
-      {/* Checkbox */}
-      <button
-        onClick={e => { e.stopPropagation(); onToggle(task) }}
-        style={{
-          width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-          border: `2px solid ${done ? '#2A7A52' : 'var(--wdp-border, rgba(0,0,0,0.2))'}`,
-          background: done ? 'rgba(42,122,82,0.12)' : 'transparent',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', marginTop: 2,
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      >
-        {done && <Check size={11} strokeWidth={3} style={{ color: '#2A7A52' }} />}
-      </button>
-
-      {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: FONT, fontSize: 14, fontWeight: 500,
-          color: 'var(--wdp-ink, #2C2C2C)',
-          textDecoration: done ? 'line-through' : 'none',
-          lineHeight: 1.35, marginBottom: 3,
-        }}>
-          {task.title}
+      {/* Main row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 12px 12px 10px' }}>
+        {/* Drag handle — drag only triggers from here */}
+        <div
+          onMouseDown={() => { canDragRef.current = true }}
+          onTouchStart={e => { canDragRef.current = true; onTouchStart(e, index) }}
+          style={{ flexShrink: 0, marginTop: 4, cursor: 'grab', touchAction: 'none', padding: '2px 0' }}
+        >
+          <GripVertical size={14} style={{ color: 'var(--wdp-ink-dim, rgba(44,44,44,0.25))', display: 'block' }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {task.due_date && (() => {
-            const { label, isOverdue, isToday } = fmtDate(task.due_date)
-            return (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 3,
-                fontFamily: FONT, fontSize: 11,
-                color: isOverdue ? '#C14B3A' : isToday ? '#B87C1A' : 'var(--wdp-ink-mid, #747474)',
-                fontWeight: isOverdue || isToday ? 600 : 400,
-              }}>
-                <Calendar size={10} />
-                {label}
-              </span>
-            )
-          })()}
-          {task.priority && task.priority !== 'medium' && (
-            <span style={{
-              fontFamily: FONT, fontSize: 10, fontWeight: 700,
-              textTransform: 'uppercase', letterSpacing: '0.06em',
-              color: pcolor,
-            }}>
-              {task.priority}
-            </span>
+
+        {/* Checkbox */}
+        <button
+          onClick={e => { e.stopPropagation(); onToggle(task) }}
+          style={{
+            width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+            border: `2px solid ${done ? '#2A7A52' : 'var(--wdp-border, rgba(0,0,0,0.2))'}`,
+            background: done ? 'rgba(42,122,82,0.12)' : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', marginTop: 2,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          {done && <Check size={11} strokeWidth={3} style={{ color: '#2A7A52' }} />}
+        </button>
+
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {isEditing ? (
+            <input
+              ref={editInputRef}
+              autoFocus
+              value={editValue}
+              onChange={e => setEditValue(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitEdit()
+                if (e.key === 'Escape') { setEditValue(task.title); setIsEditing(false) }
+              }}
+              style={{
+                width: '100%', border: 'none', borderBottom: '1.5px solid var(--wdp-accent, #C27A54)',
+                outline: 'none', background: 'transparent',
+                fontFamily: FONT, fontSize: 16, fontWeight: 500,
+                color: 'var(--wdp-ink, #2C2C2C)', padding: '0 0 2px', marginBottom: 3,
+              }}
+            />
+          ) : (
+            <div
+              onClick={() => { if (!done) setIsEditing(true) }}
+              style={{
+                fontFamily: FONT, fontSize: 14, fontWeight: 500,
+                color: 'var(--wdp-ink, #2C2C2C)',
+                textDecoration: done ? 'line-through' : 'none',
+                lineHeight: 1.35, marginBottom: 3,
+                cursor: done ? 'default' : 'text',
+              }}
+            >
+              {task.title}
+            </div>
           )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {task.due_date && (() => {
+              const { label, isOverdue, isToday } = fmtDate(task.due_date)
+              return (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  fontFamily: FONT, fontSize: 11,
+                  color: isOverdue ? '#C14B3A' : isToday ? '#B87C1A' : 'var(--wdp-ink-mid, #747474)',
+                  fontWeight: isOverdue || isToday ? 600 : 400,
+                }}>
+                  <Calendar size={10} />
+                  {label}
+                </span>
+              )
+            })()}
+            {task.priority && task.priority !== 'medium' && (
+              <span style={{
+                fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+                color: pcolor,
+              }}>
+                {task.priority}
+              </span>
+            )}
+            {/* Notes toggle */}
+            <button
+              onClick={() => setShowNotes(p => !p)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                fontFamily: FONT, fontSize: 11, fontWeight: 500,
+                color: (task.notes || notesValue) ? 'var(--wdp-ink-mid)' : 'var(--wdp-ink-dim, rgba(44,44,44,0.3))',
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              <FileText size={10} />
+              {showNotes ? 'Hide notes' : (task.notes ? 'Notes' : 'Add notes')}
+            </button>
+          </div>
         </div>
+
+        {/* Delete */}
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(task.id) }}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--wdp-ink-dim, rgba(44,44,44,0.22))',
+            padding: 4, flexShrink: 0, display: 'flex', marginTop: 1,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <X size={13} />
+        </button>
       </div>
 
-      {/* Delete */}
-      <button
-        onClick={e => { e.stopPropagation(); onDelete(task.id) }}
-        style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--wdp-ink-dim, rgba(44,44,44,0.22))',
-          padding: 4, flexShrink: 0, display: 'flex', marginTop: 1,
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      >
-        <X size={13} />
-      </button>
+      {/* Notes area */}
+      {showNotes && (
+        <div style={{
+          borderTop: '1px solid var(--wdp-border)',
+          padding: '10px 12px 12px 42px',
+        }}>
+          <textarea
+            value={notesValue}
+            onChange={e => setNotesValue(e.target.value)}
+            onBlur={commitNotes}
+            placeholder="Add notes, links, or context…"
+            rows={3}
+            style={{
+              width: '100%', border: '1px solid var(--wdp-border)',
+              borderRadius: 8, padding: '8px 10px',
+              fontFamily: FONT, fontSize: 14,
+              color: 'var(--wdp-ink)', background: 'var(--wdp-ground)',
+              outline: 'none', resize: 'vertical', lineHeight: 1.5,
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -377,6 +469,31 @@ export default function TasksPage() {
     }
   }
 
+  async function handleEdit(id: number, title: string) {
+    const task = tasks.find(t => t.id === id)
+    if (!task || task.title === title) return
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...task, title }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setTasks(prev => prev.map(t => t.id === updated.id ? { ...updated, project_name: t.project_name, project_color: t.project_color } : t))
+    }
+  }
+
+  async function handleUpdateNotes(id: number, notes: string) {
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
+    await fetch(`/api/tasks/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...task, notes }),
+    })
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, notes } : t))
+  }
+
   const visible = tasks.filter(t => filter === 'all' || t.status === filter)
   const active  = visible.filter(t => t.status !== 'done')
   const done    = visible.filter(t => t.status === 'done')
@@ -443,6 +560,8 @@ export default function TasksPage() {
                     isDragOver={dragOver === i}
                     onToggle={handleToggle}
                     onDelete={handleDelete}
+                    onEdit={handleEdit}
+                    onUpdateNotes={handleUpdateNotes}
                     onDragStart={handleDragStart}
                     onDragOver={handleDragOver}
                     onDragEnd={handleDragEnd}
@@ -466,6 +585,8 @@ export default function TasksPage() {
                         isDragging={false} isDragOver={false}
                         onToggle={handleToggle}
                         onDelete={handleDelete}
+                        onEdit={handleEdit}
+                        onUpdateNotes={handleUpdateNotes}
                         onDragStart={() => {}}
                         onDragOver={() => {}}
                         onDragEnd={() => {}}

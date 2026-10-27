@@ -957,7 +957,7 @@ function RecipeLabPage() {
                 ) : (
                   <div className="p-5">
                     <p className="text-[10px] font-bold uppercase tracking-widest px-1 pb-3" style={{ color: 'var(--wdp-ink-mid)' }}>Saved Recipes · {savedRecipes.length}</p>
-                    <div className={`grid gap-3 ${selectedCard ? 'grid-cols-1' : 'grid-cols-2 md:grid-cols-3'}`}>
+                    <div className={`grid gap-3 ${selectedCard ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
                     {savedRecipes.map(r => {
                       const isSelected = selectedCard === r.id
                       return (
