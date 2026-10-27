@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   MessageCircle, Package, CheckSquare, LayoutDashboard, MoreHorizontal,
-  Mail, TrendingUp, Users, FileText, BookOpen, Megaphone, Briefcase,
+  TrendingUp, Users, FileText, BookOpen, Megaphone, Briefcase,
   ChefHat, Settings, Globe, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -24,7 +24,6 @@ const ALL_SECTIONS = [
   { label: 'Dashboard',   href: '/dashboard',   icon: LayoutDashboard, desc: 'Overview & KPIs' },
   { label: 'Tasks',       href: '/tasks',       icon: CheckSquare,    desc: 'To-dos & projects' },
   { label: 'Inventory',   href: '/inventory',   icon: Package,        desc: 'Stock & products', badgeKey: 'inventory' as const },
-  { label: 'Email',       href: '/email',       icon: Mail,           desc: 'Inbox', badgeKey: 'email' as const },
   { label: 'Recipes',     href: '/recipes',     icon: ChefHat,        desc: 'Recipe lab' },
   { label: 'Marketing',   href: '/marketing',   icon: Megaphone,      desc: 'Campaigns & social' },
   { label: 'Financials',  href: '/financials',  icon: TrendingUp,     desc: 'Revenue & P&L' },
@@ -36,11 +35,11 @@ const ALL_SECTIONS = [
   { label: 'Settings',    href: '/settings',    icon: Settings,       desc: 'Preferences' },
 ]
 
-type BadgeKey = 'inventory' | 'email'
+type BadgeKey = 'inventory'
 
 export function BottomNav() {
   const pathname = usePathname()
-  const [badges, setBadges] = useState<Record<BadgeKey, number>>({ inventory: 0, email: 0 })
+  const [badges, setBadges] = useState<Record<BadgeKey, number>>({ inventory: 0 })
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
@@ -50,11 +49,6 @@ export function BottomNav() {
         const critical = rows.filter(r => r.status === 'active' && !r.is_bundle && r.shopify_qty <= Math.floor(r.reorder_threshold * 0.5))
         setBadges(prev => ({ ...prev, inventory: critical.length }))
       })
-      .catch(() => {})
-
-    fetch('/api/email/unread-count')
-      .then(r => r.json())
-      .then((d: { count: number }) => setBadges(prev => ({ ...prev, email: d.count ?? 0 })))
       .catch(() => {})
   }, [])
 

@@ -52,7 +52,6 @@ const NAV = [
   { icon: FileText,        label: 'Docs',        href: '/docs' },
   { icon: Megaphone,       label: 'Marketing',   href: '/marketing' },
   { icon: Trophy,          label: 'Competitive', href: '/competitive' },
-  { icon: Mail,            label: 'Email',       href: '/email' },
   { icon: Users,           label: 'Contacts',    href: '/contacts' },
 ]
 
@@ -1941,17 +1940,19 @@ export default function ChatPage() {
     <div className="flex h-full overflow-hidden" style={{ background: 'var(--wdp-ground, #FFFFFF)' }}>
 
       {/* ── Left nav rail ────────────────────────────────────────────────── */}
-      <nav style={{
-        width: 48,
-        background: 'var(--wdp-ground, #FFFFFF)',
-        borderRight: '1px solid var(--wdp-border, rgba(0,0,0,0.08))',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '14px 0',
-        gap: 2,
-        flexShrink: 0,
-      }}>
+      <nav
+        className="hidden md:flex"
+        style={{
+          width: 48,
+          background: 'var(--wdp-ground, #FFFFFF)',
+          borderRight: '1px solid var(--wdp-border, rgba(0,0,0,0.08))',
+          flexDirection: 'column',
+          alignItems: 'center',
+          padding: '14px 0',
+          gap: 2,
+          flexShrink: 0,
+        }}
+      >
         {/* W neon logo */}
         <Link href="/chat" style={{ marginBottom: 14 }} title="WDP Command Center">
           <div style={{
