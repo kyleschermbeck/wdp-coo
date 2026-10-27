@@ -2129,11 +2129,11 @@ export default function ChatPage() {
                   { icon: Mail,        color: '#4A7C8A', bg: 'rgba(120,183,197,0.15)', title: 'Draft an Email',    desc: 'Klaviyo campaign, customer reply, or pitch',        prompt: 'Help me draft a Klaviyo email campaign for our next promotion.' },
                   { icon: Zap,         color: '#C14B3A', bg: 'rgba(193,75,58,0.10)',   title: 'Priority Queue',    desc: "What's most urgent and needs my attention?",        prompt: "What's most urgent and needs my attention today?" },
                   { icon: Megaphone,   color: '#8AA800', bg: 'rgba(215,255,16,0.12)',  title: 'Marketing Plan',    desc: 'Upcoming campaigns and seasonal windows',           prompt: 'What marketing campaigns should I be planning for the next 6 weeks?' },
-                  { icon: FolderOpen,  color: '#6B4CC0', bg: 'rgba(107,76,192,0.10)',  title: 'Project Status',    desc: 'Review in-progress and blocked work',               prompt: 'Give me a status update on all active projects.' },
+                  { icon: Zap,         color: '#6B4CC0', bg: 'rgba(107,76,192,0.10)',  title: 'Daily Brief',       desc: 'Generate your morning brief now',                   prompt: '__daily_brief__' },
                 ] as Array<{ icon: React.ElementType; color: string; bg: string; title: string; desc: string; prompt: string }>).map((card, ci) => (
                   <button
                     key={ci}
-                    onClick={() => send(card.prompt)}
+                    onClick={() => card.prompt === '__daily_brief__' ? generateBrief() : send(card.prompt)}
                     onMouseEnter={() => setHoveredCard(ci)}
                     onMouseLeave={() => setHoveredCard(null)}
                     style={{
@@ -2282,12 +2282,15 @@ export default function ChatPage() {
         </div>
 
         {/* Input */}
-        <div style={{
-          padding: '12px 20px 16px',
-          borderTop: '1px solid var(--wdp-border)',
-          background: 'var(--wdp-ground)',
-          flexShrink: 0,
-        }}>
+        <div
+          className="chat-compose-wrap"
+          style={{
+            padding: '12px 20px 16px',
+            borderTop: '1px solid var(--wdp-border)',
+            background: 'var(--wdp-ground)',
+            flexShrink: 0,
+          }}
+        >
           {/* Constrained inner — matches feed width */}
           <div style={{ maxWidth: 620, margin: '0 auto' }}>
 

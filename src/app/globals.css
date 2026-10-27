@@ -54,6 +54,10 @@ html, body {
 @media (max-width: 767px) {
   * { max-width: 100vw; }
   main { overflow-x: hidden !important; }
+  /* Push compose bar above the fixed bottom nav (56px) + safe area */
+  .chat-compose-wrap {
+    padding-bottom: calc(16px + 56px + env(safe-area-inset-bottom, 0px)) !important;
+  }
 }
 
 h1, h2, h3, h4 {
