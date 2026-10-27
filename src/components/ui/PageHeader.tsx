@@ -16,7 +16,7 @@ export function PageHeader({ eyebrow, title, subtitle, meta, actions, children }
   return (
     <header style={{ marginBottom: children ? 20 : 32 }}>
       {/* Eyebrow + title row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 }}>
+      <div className="page-header-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{
             ...FONT,
@@ -50,7 +50,7 @@ export function PageHeader({ eyebrow, title, subtitle, meta, actions, children }
           )}
         </div>
         {actions && (
-          <div style={{ display: 'flex', gap: 10, flexShrink: 0, paddingTop: 8, alignItems: 'center' }}>
+          <div className="page-header-actions" style={{ display: 'flex', gap: 10, flexShrink: 0, paddingTop: 8, alignItems: 'center' }}>
             {actions}
           </div>
         )}

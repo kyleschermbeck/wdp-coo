@@ -3378,16 +3378,16 @@ export default function InventoryPage() {
                 const statusBg = order.status === 'ready' ? 'rgba(92,138,63,0.1)' : order.status === 'partial' ? 'rgba(194,122,84,0.1)' : 'rgba(154,58,58,0.1)'
                 const statusLabel = order.status === 'ready' ? 'Ready to ship' : order.status === 'partial' ? `${order.totalCanFill} of ${order.totalNeeded} fillable` : `Short ${order.totalShort}`
                 return (
-                  <div key={order.orderId} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
+                  <div key={order.orderId} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12 }}>
                     {/* Order header */}
                     <div
                       onClick={() => setSelectedOrder(order.orderNumber)}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer', borderBottom: '1px solid rgba(216,210,198,0.5)' }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer', borderBottom: '1px solid rgba(216,210,198,0.5)', gap: 8, flexWrap: 'wrap' }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', ...FONT }}>#{order.orderNumber}</span>
-                        <span style={{ fontSize: 11, color: '#747474', ...FONT }}>{order.email}</span>
-                        <span style={{ fontSize: 11, color: 'rgba(116,116,116,0.5)', ...FONT }}>
+                      <div className="order-hdr-left" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 auto', minWidth: 0 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', flexShrink: 0, ...FONT }}>#{order.orderNumber}</span>
+                        <span className="order-hdr-email" style={{ fontSize: 11, color: '#747474', ...FONT }}>{order.email}</span>
+                        <span style={{ fontSize: 11, color: 'rgba(116,116,116,0.5)', flexShrink: 0, ...FONT }}>
                           {new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>
                       </div>

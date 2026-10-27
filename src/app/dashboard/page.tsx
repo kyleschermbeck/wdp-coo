@@ -244,7 +244,7 @@ export default function DashboardPage() {
     <div className="page-wrap" style={{ maxWidth: 1100, background: 'var(--wdp-ground, #FAF9F6)' }}>
 
       {/* ── Page header ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
+      <div className="dash-header-row" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
         <div>
           <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 4 }}>
             Weeknight Dinner Party
@@ -358,7 +358,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Two-column grid ─────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="dash-grid">
 
         {/* Revenue sparkline */}
         <Card>
@@ -413,7 +413,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Top products + Email ─────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="dash-grid">
 
         {/* Top products */}
         <Card>
@@ -487,7 +487,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── GA4 placeholder + Inventory ──────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="dash-grid">
 
         {/* GA4 placeholder */}
         <Card style={{ position: 'relative', overflow: 'hidden' }}>

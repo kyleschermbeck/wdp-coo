@@ -1117,7 +1117,7 @@ function RecipeLabPage() {
                   <>
                   {/* Mobile backdrop */}
                   <div className="md:hidden fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={closeDetail} />
-                  <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bottom-sheet-wrap md:relative md:bottom-auto md:left-auto md:right-auto md:z-0 md:w-[60%] md:min-h-0 overflow-hidden" style={{ background: 'var(--wdp-surface)' }}>
+                  <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bottom-sheet-wrap recipe-sheet-h md:relative md:bottom-auto md:left-auto md:right-auto md:z-0 md:w-[60%] md:min-h-0 md:h-auto overflow-hidden" style={{ background: 'var(--wdp-surface)' }}>
                     {/* Detail header */}
                     <div className="px-6 pt-4 pb-0" style={{ borderBottom: '1px solid var(--wdp-border)' }}>
                       {/* Top bar: regen + close */}
