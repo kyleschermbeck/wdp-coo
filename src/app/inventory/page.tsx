@@ -1724,7 +1724,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
         return (
           <>
             <div className="fixed inset-0 z-40" style={{ background: 'rgba(44,44,44,0.22)' }} onClick={() => setOrderSidebarId(null)} />
-            <div className="fixed right-0 top-0 bottom-0 z-50" style={{ width: 420, background: '#FAF9F6', boxShadow: '-4px 0 32px rgba(44,44,44,0.13)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <div className="fixed right-0 top-0 bottom-0 z-50" style={{ width: 'min(420px, 100vw)', background: '#FAF9F6', boxShadow: '-4px 0 32px rgba(44,44,44,0.13)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
               <div style={{ background: '#2C2C2C', padding: '26px 28px 22px', position: 'relative' }}>
                 <button onClick={() => setOrderSidebarId(null)} style={{ position: 'absolute', top: 18, right: 18, background: 'none', border: 'none', color: 'rgba(250,249,246,0.5)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(250,249,246,0.5)', marginBottom: 6, ...FONT }}>{order.vendor}</div>
@@ -3193,8 +3193,8 @@ export default function InventoryPage() {
               </div>
 
               {/* Blend table */}
-              <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '3fr 56px 56px 56px 56px 56px 130px 150px 150px', background: '#FAF9F6', borderBottom: '1px solid rgba(216,210,198,0.5)' }}>
+              <div style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden', overflowX: 'auto' }}>
+                <div style={{ minWidth: 860, display: 'grid', gridTemplateColumns: '3fr 56px 56px 56px 56px 56px 130px 150px 150px', background: '#FAF9F6', borderBottom: '1px solid rgba(216,210,198,0.5)' }}>
                   {['Blend', 'Needed', 'On Hand', 'Labeled', 'To Pack', 'Build', 'Orders', 'Log labeling', 'Log packed'].map(h => (
                     <div key={h} style={{ padding: '10px 16px', fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: h === 'Build' ? 'rgba(61,118,132,0.7)' : 'rgba(116,116,116,0.6)', ...FONT }}>{h}</div>
                   ))}
@@ -3216,6 +3216,7 @@ export default function InventoryPage() {
                     <div
                       key={row.blend}
                       style={{
+                        minWidth: 860,
                         display: 'grid', gridTemplateColumns: '3fr 56px 56px 56px 56px 56px 130px 150px 150px',
                         borderBottom: i < packQueue.rows.length - 1 ? '1px solid rgba(216,210,198,0.4)' : 'none',
                         background: i % 2 === 0 ? '#fff' : '#FAFAF8',
@@ -3400,12 +3401,12 @@ export default function InventoryPage() {
                     </div>
 
                     {/* Items */}
-                    <div style={{ padding: '0 18px' }}>
+                    <div style={{ padding: '0 18px', overflowX: 'auto' }}>
                       {order.items.map((item, j) => {
                         const fillable = item.canFill === item.needed
                         const short = item.short > 0
                         return (
-                          <div key={j} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 100px 70px 80px 80px', alignItems: 'center', padding: '11px 0', borderBottom: j < order.items.length - 1 ? '1px solid rgba(216,210,198,0.3)' : 'none', gap: 8 }}>
+                          <div key={j} style={{ minWidth: 480, display: 'grid', gridTemplateColumns: '1fr 60px 100px 70px 80px 80px', alignItems: 'center', padding: '11px 0', borderBottom: j < order.items.length - 1 ? '1px solid rgba(216,210,198,0.3)' : 'none', gap: 8 }}>
                             <div style={{ ...FONT, fontSize: 13, fontWeight: 500, color: '#2C2C2C' }}>{item.title}</div>
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontSize: 10, color: 'rgba(116,116,116,0.5)', ...FONT }}>needed</div>
@@ -3469,13 +3470,13 @@ export default function InventoryPage() {
                 <X size={18} />
               </button>
             </div>
-            <div style={{ padding: '16px 24px 24px', maxHeight: '60vh', overflowY: 'auto' }}>
+            <div style={{ padding: '16px 24px 24px', maxHeight: '60vh', overflowY: 'auto', overflowX: 'auto' }}>
               {supplyBreakdownLoading ? (
                 <p style={{ color: '#747474', fontSize: 13, ...FONT }}>Loading…</p>
               ) : !supplyBreakdown || supplyBreakdown.items.length === 0 ? (
                 <p style={{ color: '#747474', fontSize: 13, ...FONT }}>No blends require this ingredient for current orders.</p>
               ) : (
-                <>
+                <div style={{ minWidth: 260 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px 60px 70px', gap: 8, padding: '0 0 8px', borderBottom: '1px solid rgba(216,210,198,0.5)', marginBottom: 4 }}>
                     {['Blend', 'Jars', 'Tbsp/Jar', 'Total Tbsp'].map(h => (
                       <span key={h} style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', ...FONT, textAlign: h !== 'Blend' ? 'right' : 'left' }}>{h}</span>
@@ -3495,7 +3496,7 @@ export default function InventoryPage() {
                     <span />
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#C27A54', textAlign: 'right', fontVariantNumeric: 'tabular-nums', ...FONT }}>{supplyBreakdown.items.reduce((s, r) => s + r.totalTbsp, 0).toFixed(2)}</span>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>

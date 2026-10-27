@@ -354,7 +354,7 @@ function StatusPills({ value, onChange }: { value: TaskStatus | 'all'; onChange:
     { v: 'done', label: 'Done' },
   ]
   return (
-    <div style={{ display: 'flex', gap: 4 }}>
+    <div style={{ display: 'flex', gap: 4, width: 'max-content' }}>
       {opts.map(o => (
         <button
           key={o.v}
@@ -440,16 +440,16 @@ export default function AllTasksPage() {
 
         {/* Header */}
         <div style={{
-          padding: '28px 36px 20px',
+          padding: 'clamp(16px,4vw,28px) clamp(16px,4vw,36px) 16px',
           borderBottom: '1px solid var(--wdp-border)',
           flexShrink: 0,
         }}>
           <p style={{ fontFamily: FONT, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--wdp-ink-mid)', marginBottom: 4 }}>
             Work Tracker
           </p>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 14 }}>
             <div>
-              <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: 'var(--wdp-ink)', letterSpacing: '-0.4px', lineHeight: 1.1, margin: 0 }}>
+              <h1 style={{ fontFamily: SERIF, fontSize: 'clamp(22px,5vw,30px)', fontWeight: 700, color: 'var(--wdp-ink)', letterSpacing: '-0.4px', lineHeight: 1.1, margin: 0 }}>
                 Projects &amp; Tasks
               </h1>
               <p style={{ fontFamily: FONT, fontSize: 12, color: 'var(--wdp-ink-mid)', marginTop: 5 }}>
@@ -459,40 +459,40 @@ export default function AllTasksPage() {
             </div>
           </div>
 
-          {/* Filters */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <StatusPills value={statusFilter} onChange={setStatusFilter} />
+          {/* Search */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            border: '1px solid var(--wdp-border)', borderRadius: 10,
+            padding: '8px 12px', background: 'var(--wdp-surface)',
+            marginBottom: 10,
+          }}>
+            <Search size={14} style={{ color: 'var(--wdp-ink-mid)', flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder="Search tasks…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                border: 'none', outline: 'none', background: 'transparent',
+                fontFamily: FONT, fontSize: 14, color: 'var(--wdp-ink)',
+                flex: 1, minWidth: 0,
+              }}
+            />
+            {search && (
+              <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--wdp-ink-mid)' }}>
+                <X size={13} />
+              </button>
+            )}
+          </div>
 
-            {/* Search */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              border: '1px solid var(--wdp-border)', borderRadius: 99,
-              padding: '5px 12px', background: 'var(--wdp-surface)',
-              marginLeft: 'auto',
-            }}>
-              <Search size={12} style={{ color: 'var(--wdp-ink-mid)', flexShrink: 0 }} />
-              <input
-                type="text"
-                placeholder="Search tasks…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{
-                  border: 'none', outline: 'none', background: 'transparent',
-                  fontFamily: FONT, fontSize: 12, color: 'var(--wdp-ink)',
-                  width: 160,
-                }}
-              />
-              {search && (
-                <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--wdp-ink-mid)' }}>
-                  <X size={11} />
-                </button>
-              )}
-            </div>
+          {/* Status pills — scrollable on mobile */}
+          <div style={{ overflowX: 'auto', marginBottom: 2, paddingBottom: 4 }}>
+            <StatusPills value={statusFilter} onChange={setStatusFilter} />
           </div>
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 36px 40px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 'clamp(16px,4vw,24px) clamp(16px,4vw,36px) 40px' }}>
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--wdp-ink-mid)', fontFamily: FONT, fontSize: 13 }}>
               <Loader2 size={14} className="animate-spin" /> Loading…
