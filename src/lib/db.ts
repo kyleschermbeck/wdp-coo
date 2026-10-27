@@ -225,6 +225,7 @@ async function runMigrations(db: Client) {
   await tryExec(db, `ALTER TABLE subtasks ADD COLUMN due_date TEXT`)
   await tryExec(db, `ALTER TABLE subtasks ADD COLUMN status TEXT NOT NULL DEFAULT 'todo'`)
   await tryExec(db, `ALTER TABLE subtasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
+  await tryExec(db, `ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
   await tryExec(db, `ALTER TABLE email_cache ADD COLUMN is_sent INTEGER NOT NULL DEFAULT 0`)
   await tryExec(db, `CREATE TABLE IF NOT EXISTS subtask_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

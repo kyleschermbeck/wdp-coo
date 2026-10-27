@@ -111,7 +111,7 @@ function RecipeLabPage() {
   const [selectedCard, setSelectedCard] = useState<number | null>(null)
   const [cardTab, setCardTab] = useState<'overview' | 'ingredients' | 'steps' | 'notes'>('overview')
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
-  const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [panelCollapsed, setPanelCollapsed] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
   const [addingIngredient, setAddingIngredient] = useState(false)
   const [newIngredientValue, setNewIngredientValue] = useState('')
   const [addingStep, setAddingStep] = useState(false)
@@ -506,7 +506,7 @@ function RecipeLabPage() {
   return (
     <div className="h-full flex flex-col" style={{ background: 'var(--wdp-ground)', color: 'var(--wdp-ink)', ...FONT }}>
       {/* Header */}
-      <div className="px-8 py-6 flex items-center gap-3" style={{ borderBottom: '1px solid var(--wdp-border)' }}>
+      <div className="px-4 md:px-8 py-4 md:py-6 flex items-center gap-3 flex-wrap" style={{ borderBottom: '1px solid var(--wdp-border)' }}>
         <div className="w-8 h-8 rounded-lg bg-terracotta/10 flex items-center justify-center">
           <FlaskConical className="w-4 h-4 text-terracotta" strokeWidth={1.75} />
         </div>
@@ -559,10 +559,10 @@ function RecipeLabPage() {
         )}
       </div>
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
         {/* LEFT: Criteria Panel */}
         <div
-          className={`shrink-0 flex flex-col overflow-y-auto transition-all duration-200 ${panelCollapsed ? 'w-10' : 'w-72'}`}
+          className={`shrink-0 flex flex-col overflow-y-auto transition-all duration-200 ${panelCollapsed ? 'w-full md:w-10 max-h-10 md:max-h-none' : 'w-full md:w-72 max-h-64 md:max-h-none'}`}
           style={{ borderRight: '1px solid var(--wdp-border)', background: 'var(--wdp-surface)', boxShadow: '2px 0 8px rgba(0,0,0,0.04)' }}
         >
           {/* Collapse toggle */}
@@ -870,11 +870,11 @@ function RecipeLabPage() {
         </div>
 
         {/* RIGHT: Recipe Output / Lab */}
-        <div className="flex-1 flex min-h-0 overflow-hidden" style={{ background: 'var(--wdp-ground)' }}>
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden md:overflow-hidden overflow-y-auto" style={{ background: 'var(--wdp-ground)' }}>
 
           {/* ── Menu Output ── */}
           {menuMode && (
-            <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-8">
               {menuPhase === 'idle' && (
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-center" style={{ color: 'var(--wdp-ink-dim)' }}>
                   <UtensilsCrossed className="w-10 h-10 opacity-20" />
@@ -945,7 +945,7 @@ function RecipeLabPage() {
           {!menuMode && phase === 'idle' && (
             <>
               {/* Card list */}
-              <div className={`flex flex-col overflow-y-auto transition-all ${selectedCard ? 'w-[40%] shrink-0' : 'flex-1'}`} style={{ borderRight: '1px solid var(--wdp-border)' }}>
+              <div className={`flex flex-col overflow-y-auto transition-all ${selectedCard ? 'w-full md:w-[40%] md:shrink-0' : 'flex-1'}`} style={{ borderRight: selectedCard ? '1px solid var(--wdp-border)' : 'none' }}>
                 {savedRecipes.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-center px-10 py-16 gap-3">
                     <div className="w-12 h-12 rounded-2xl bg-terracotta/8 flex items-center justify-center">
@@ -957,7 +957,7 @@ function RecipeLabPage() {
                 ) : (
                   <div className="p-5">
                     <p className="text-[10px] font-bold uppercase tracking-widest px-1 pb-3" style={{ color: 'var(--wdp-ink-mid)' }}>Saved Recipes · {savedRecipes.length}</p>
-                    <div className={`grid gap-3 ${selectedCard ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                    <div className={`grid gap-3 ${selectedCard ? 'grid-cols-1' : 'grid-cols-2 md:grid-cols-3'}`}>
                     {savedRecipes.map(r => {
                       const isSelected = selectedCard === r.id
                       return (
@@ -1113,7 +1113,7 @@ function RecipeLabPage() {
                 const seoSection = noteSections.find(s => s.header === 'SEO Heading' || s.header === 'SEO Excerpt')
                 const hasSeo = noteSections.some(s => s.header === 'SEO Heading' || s.header === 'SEO Excerpt')
                 return (
-                  <div className="flex flex-col overflow-hidden min-h-0" style={{ background: 'var(--wdp-surface)', width: '60%' }}>
+                  <div className="flex flex-col overflow-hidden min-h-0 w-full md:w-[60%]" style={{ background: 'var(--wdp-surface)' }}>
                     {/* Detail header */}
                     <div className="px-6 pt-4 pb-0" style={{ borderBottom: '1px solid var(--wdp-border)' }}>
                       {/* Top bar: regen + close */}

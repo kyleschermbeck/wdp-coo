@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
             (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id) as subtask_count,
             (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id AND s.status = 'done') as completed_subtask_count
           FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
-          ORDER BY t.due_date ASC NULLS LAST, t.created_at DESC
+          ORDER BY t.sort_order ASC, t.id ASC
         `, args: []})).rows
     ) as Record<string, unknown>[]
 
