@@ -263,9 +263,9 @@ html[data-density="compact"] nav a { padding-top: 0.375rem !important; padding-b
   /* Bottom sheet pattern — replaces right-side drawers on mobile */
   @media (max-width: 767px) {
     .bottom-sheet-wrap {
-      max-height: 92vh;
+      max-height: calc(92vh - 56px);
       border-radius: 20px 20px 0 0;
-      padding-bottom: env(safe-area-inset-bottom, 0px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 56px);
     }
     .bottom-sheet-wrap::before {
       content: '';

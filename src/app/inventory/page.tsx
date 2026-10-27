@@ -1726,9 +1726,9 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
             <div className="fixed inset-0 z-40" style={{ background: 'rgba(44,44,44,0.22)' }} onClick={() => setOrderSidebarId(null)} />
             <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col overflow-y-auto bottom-sheet-wrap md:top-0 md:left-auto md:w-[420px]" style={{ background: '#FAF9F6', boxShadow: '0 -4px 32px rgba(44,44,44,0.13)' }}>
               <div style={{ background: '#2C2C2C', padding: '26px 28px 22px', position: 'relative' }}>
-                <button onClick={() => setOrderSidebarId(null)} style={{ position: 'absolute', top: 18, right: 18, background: 'none', border: 'none', color: 'rgba(250,249,246,0.5)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(250,249,246,0.5)', marginBottom: 6, ...FONT }}>{order.vendor}</div>
-                <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px', color: '#FAF9F6', ...FONT }}>
+                <button onClick={() => setOrderSidebarId(null)} style={{ position: 'absolute', top: 18, right: 18, background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 8, color: 'rgba(250,249,246,0.7)', cursor: 'pointer', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+                <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(250,249,246,0.45)', marginBottom: 8, ...FONT }}>{order.vendor}</div>
+                <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px', color: '#FAF9F6', fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
                   {order.order_number ? `Order #${order.order_number}` : order.subject ?? 'Supply Order'}
                 </h2>
                 <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: `${statusColor}30`, color: statusColor }}>
@@ -2627,6 +2627,7 @@ export default function InventoryPage() {
   const [manualOrderForm, setManualOrderForm] = useState({ vendor: '', description: '', qty: '', expectedDelivery: '' })
   const [manualOrderDupes, setManualOrderDupes] = useState<{ id: number; vendor: string; order_date: string | null; status: string }[] | null>(null)
   const [addingManualOrder, setAddingManualOrder] = useState(false)
+  const [blendOrdersDrawer, setBlendOrdersDrawer] = useState<{ blend: string; orderNumbers: number[] } | null>(null)
 
   const loadData = useCallback(async () => {
     const [invRes, supRes, statusRes, bundleRes] = await Promise.all([
@@ -3220,38 +3221,35 @@ export default function InventoryPage() {
                     <div key={row.blend} style={{ background: '#fff', border: '1px solid rgba(216,210,198,0.6)', borderRadius: 12, overflow: 'hidden' }}>
                       {/* Card header */}
                       <div style={{ padding: '12px 16px 10px', borderBottom: '1px solid rgba(216,210,198,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                           <button
                             onClick={() => setSelectedBlend({ blend: row.blend, shopifyId: row.shopifyId, canFill: row.canFill, jarsNeeded: row.jars })}
-                            style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C', ...FONT, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C', ...FONT, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
                           >{row.blend}</button>
                           {(row.jars > 0 || row.labeledJars > 0) && (
                             <span title={tip} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0, display: 'inline-block' }} />
                           )}
                         </div>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          {row.orderNumbers.map(num => (
-                            <button
-                              key={num}
-                              onClick={() => setSelectedOrder(num)}
-                              style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: 'rgba(61,118,132,0.1)', color: '#3d7684', border: '1px solid rgba(61,118,132,0.2)', cursor: 'pointer', ...FONT }}
-                            >#{num}</button>
-                          ))}
-                        </div>
+                        {row.orderNumbers.length > 0 && (
+                          <button
+                            onClick={() => setBlendOrdersDrawer({ blend: row.blend, orderNumbers: row.orderNumbers })}
+                            style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 999, background: 'rgba(61,118,132,0.1)', color: '#3d7684', border: '1px solid rgba(61,118,132,0.2)', cursor: 'pointer', flexShrink: 0, ...FONT }}
+                          >{row.orderNumbers.length} {row.orderNumbers.length === 1 ? 'order' : 'orders'}</button>
+                        )}
                       </div>
 
                       {/* Stats row */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 0, borderBottom: '1px solid rgba(216,210,198,0.4)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, padding: '10px 12px', borderBottom: '1px solid rgba(216,210,198,0.4)' }}>
                         {[
-                          { label: 'Needed', value: row.jars, color: '#C27A54' },
-                          { label: 'On Hand', value: packed, color: onHandColor },
-                          { label: 'Labeled', value: labeled > 0 ? labeled : '—', color: labeledColor },
-                          { label: 'To Pack', value: toPack, color: toPackColor },
-                          { label: 'Build', value: suggested > 0 ? suggested : '—', color: suggested > 0 ? '#3d7684' : 'rgba(116,116,116,0.35)' },
-                        ].map((s, i) => (
-                          <div key={s.label} style={{ padding: '10px 0 10px', textAlign: 'center', borderRight: i < 4 ? '1px solid rgba(216,210,198,0.4)' : 'none' }}>
-                            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.55)', marginBottom: 3, ...FONT }}>{s.label}</div>
-                            <div style={{ fontSize: 16, fontWeight: 700, color: s.color, fontVariantNumeric: 'tabular-nums', ...FONT }}>{s.value}</div>
+                          { label: 'Needed', value: row.jars, color: '#C27A54', bg: 'rgba(194,122,84,0.08)' },
+                          { label: 'On Hand', value: packed, color: onHandColor, bg: packed >= row.jars ? 'rgba(92,138,63,0.08)' : 'rgba(153,64,64,0.08)' },
+                          { label: 'To Pack', value: toPack, color: toPackColor, bg: toPack > 0 ? 'rgba(201,64,64,0.08)' : 'rgba(92,138,63,0.08)' },
+                          { label: 'Labeled', value: labeled > 0 ? labeled : '—', color: labeledColor, bg: 'rgba(116,116,116,0.06)' },
+                          { label: 'Build', value: suggested > 0 ? suggested : '—', color: suggested > 0 ? '#3d7684' : 'rgba(116,116,116,0.35)', bg: suggested > 0 ? 'rgba(61,118,132,0.08)' : 'rgba(116,116,116,0.04)' },
+                        ].map(s => (
+                          <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: s.bg, borderRadius: 6, padding: '5px 10px' }}>
+                            <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(116,116,116,0.6)', ...FONT }}>{s.label}</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: s.color, fontVariantNumeric: 'tabular-nums', ...FONT }}>{s.value}</span>
                           </div>
                         ))}
                       </div>
@@ -3455,6 +3453,32 @@ export default function InventoryPage() {
       )}
       {selectedOrder && (
         <OrderSidebar orderNumber={selectedOrder} onClose={() => setSelectedOrder(null)} />
+      )}
+
+      {/* Blend orders mini drawer */}
+      {blendOrdersDrawer && (
+        <>
+          <div className="fixed inset-0 z-40" style={{ background: 'rgba(44,44,44,0.22)' }} onClick={() => setBlendOrdersDrawer(null)} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bottom-sheet-wrap md:top-0 md:left-auto md:w-[320px]" style={{ background: '#FAF9F6', boxShadow: '0 -4px 32px rgba(44,44,44,0.13)' }}>
+            <div style={{ background: '#2C2C2C', padding: '22px 24px 18px', position: 'relative' }}>
+              <button onClick={() => setBlendOrdersDrawer(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 8, color: 'rgba(250,249,246,0.7)', cursor: 'pointer', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+              <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(250,249,246,0.45)', marginBottom: 6, ...FONT }}>Orders</div>
+              <h2 style={{ fontSize: 19, fontWeight: 700, margin: 0, color: '#FAF9F6', ...SERIF }}>{blendOrdersDrawer.blend}</h2>
+            </div>
+            <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {blendOrdersDrawer.orderNumbers.map((num: number) => (
+                <button
+                  key={num}
+                  onClick={() => { setBlendOrdersDrawer(null); setSelectedOrder(num) }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 10, background: '#fff', border: '1px solid rgba(216,210,198,0.6)', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#3d7684', ...FONT }}>Order #{num}</span>
+                  <ExternalLink size={13} color="rgba(116,116,116,0.5)" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Manual on-order sidebar */}
