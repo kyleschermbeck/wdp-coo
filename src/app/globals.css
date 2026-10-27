@@ -47,6 +47,13 @@ html, body {
   color: #2C2C2C;
   font-family: var(--font-body), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Mobile: prevent any child from causing horizontal scroll */
+@media (max-width: 767px) {
+  * { max-width: 100vw; }
+  main { overflow-x: hidden !important; }
 }
 
 h1, h2, h3, h4 {
