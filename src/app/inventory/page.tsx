@@ -2649,6 +2649,13 @@ export default function InventoryPage() {
 
   useEffect(() => { loadData(); loadPackQueue(); loadOrdersAnalysis() }, [loadData])
 
+  // Refresh when tab/app becomes visible (handles iPhone home screen resume + desktop tab switching)
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') { loadData(); loadPackQueue() } }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [loadData])
+
   async function handleSync() {
     setSyncing(true)
     try {
