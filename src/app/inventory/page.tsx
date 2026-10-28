@@ -2809,6 +2809,7 @@ export default function InventoryPage() {
         ))
       }
       showToast(`Logged ${packedQty} jar${packedQty !== 1 ? 's' : ''} of ${blend}`)
+      if (data.shopifyWarning) showToast(`Shopify sync skipped — update manually`)
     }
     setPackedQtys(prev => ({ ...prev, [shopifyId]: '' }))
     loadPackQueue()

@@ -52,15 +52,26 @@ export async function POST(req: NextRequest) {
   let locationId = ((await db.execute({sql: `SELECT shopify_id FROM shopify_locations WHERE active = 1 LIMIT 1`, args: []})).rows[0] as unknown as { shopify_id: string } | undefined)?.shopify_id
 
   if (!locationId) {
-    const locations = await fetchLocations(config)
-    const active = locations.find(l => l.active)
-    if (!active) return NextResponse.json({ error: 'No active location' }, { status: 400 })
-    locationId = String(active.id)
+    try {
+      const locations = await fetchLocations(config)
+      const active = locations.find(l => l.active)
+      if (active) locationId = String(active.id)
+    } catch { /* proceed without location */ }
   }
 
-  // Update Shopify inventory
+  // Update Shopify inventory (non-fatal — local DB always updates)
   const newQty = (product.inventory_quantity ?? 0) + qty
-  await updateInventoryLevel(config, product.inventory_item_id, locationId, newQty)
+  let shopifyWarning: string | null = null
+  if (locationId) {
+    try {
+      await updateInventoryLevel(config, product.inventory_item_id, locationId, newQty)
+    } catch (err) {
+      shopifyWarning = err instanceof Error ? err.message : 'Shopify update failed'
+    }
+  } else {
+    shopifyWarning = 'No active Shopify location found'
+  }
+  // Always update local DB regardless of Shopify result
   await db.execute({sql: `UPDATE shopify_products SET inventory_quantity = ? WHERE shopify_id = ?`, args: [newQty, shopify_id]})
 
   // Deduct from labeled_jars first (jars already labeled and waiting to fill)
@@ -136,5 +147,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, newQty, supplyUpdates })
+  return NextResponse.json({ ok: true, newQty, supplyUpdates, shopifyWarning })
 }
