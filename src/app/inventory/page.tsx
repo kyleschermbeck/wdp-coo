@@ -2848,16 +2848,21 @@ export default function InventoryPage() {
   async function logLabeling(shopifyId: string, qty: number) {
     if (!qty || qty === 0) return
     setLabelingFor(shopifyId)
-    await fetch('/api/inventory/log-labeling', {
+    const res = await fetch('/api/inventory/log-labeling', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ shopify_id: shopifyId, qty }),
     })
-    setLabelingQtys(prev => ({ ...prev, [shopifyId]: '' }))
-    loadPackQueue()
-    if (supplyLevels) loadSupplyLevels()
-    if (packagingLevels) loadPackagingLevels()
-    if (labelInventory) loadLabelInventory()
+    const data = await res.json()
+    if (!res.ok) {
+      showToast(`Error logging labels: ${data.error ?? res.status}`)
+    } else {
+      setLabelingQtys(prev => ({ ...prev, [shopifyId]: '' }))
+      loadPackQueue()
+      if (supplyLevels) loadSupplyLevels()
+      if (packagingLevels) loadPackagingLevels()
+      if (labelInventory) loadLabelInventory()
+    }
     setLabelingFor(null)
   }
 
@@ -3721,7 +3726,7 @@ export default function InventoryPage() {
 
       {toast && (
         <div style={{
-          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', bottom: 'calc(56px + env(safe-area-inset-bottom, 0px) + 12px)', left: '50%', transform: 'translateX(-50%)',
           background: '#2C2C2C', color: '#FAF9F6', padding: '10px 22px',
           borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999,
           boxShadow: '0 4px 18px rgba(44,44,44,0.28)', whiteSpace: 'nowrap', ...FONT,
