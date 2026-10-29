@@ -1393,7 +1393,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                 const q = supplySearch.toLowerCase()
                 return sl.name.toLowerCase().includes(q) || (sl.vendor ?? '').toLowerCase().includes(q)
               }).map(sl => {
-                const inputVal = containerInputs[sl.id] ?? String(sl.containers_on_hand)
+                const inputVal = containerInputs[sl.id] ?? Number(sl.containers_on_hand).toFixed(2)
                 const isShort = sl.tbsp_needed > 0 && (sl.tbsp_on_hand ?? 0) < sl.tbsp_needed
                 const isLow = !isShort && sl.containers_on_hand < 0.25
                 const statusColor = sl.missing_data ? '#C27A54' : isShort ? '#C94040' : isLow ? '#C27A54' : '#3A8A5A'
@@ -1450,9 +1450,10 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                           onChange={e => setContainerInputs(prev => ({ ...prev, [sl.id]: e.target.value }))}
                           onBlur={() => saveContainerCount(sl.id)}
                           onKeyDown={e => { if (e.key === 'Enter') saveContainerCount(sl.id) }}
+                          className="mob-container-input"
                           style={{ ...INPUT, width: 80, textAlign: 'right' }}
                         />
-                        <span style={{ fontSize: 11.5, color: '#747474', ...FONT }}>containers</span>
+                        <span className="mob-container-label" style={{ fontSize: 11.5, color: '#747474', ...FONT }}>containers</span>
                       </div>
                     </td>
                     <td data-label="Tbsp/Container" style={{ ...TD, fontVariantNumeric: 'tabular-nums' }}>
