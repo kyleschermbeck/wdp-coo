@@ -1404,7 +1404,14 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                 return (
                   <tr key={sl.id} style={{ borderTop: '1px solid rgba(216,210,198,0.35)' }}>
                     <td style={TD}>
-                      <div style={{ fontWeight: 600 }}>{sl.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>
+                        <div style={{ fontWeight: 600 }}>{sl.name}</div>
+                        <span className="mob-status-pill" style={{
+                          flexShrink: 0, fontSize: 10.5, fontWeight: 700,
+                          padding: '2px 8px', borderRadius: 999,
+                          background: `${statusColor}18`, color: statusColor,
+                        }}>{statusLabel}{diffLabel != null ? ` (${diffLabel})` : ''}</span>
+                      </div>
                       {sl.vendor && <div style={{ fontSize: 11, color: '#747474', marginBottom: 2, ...FONT }}>{sl.vendor}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <button
