@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { AlertTriangle, RefreshCw, Plus, X, ExternalLink, Pencil, Trash2, Bell, PackagePlus, EyeOff, Eye } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Plus, X, ExternalLink, Pencil, Trash2, Bell, PackagePlus, EyeOff, Eye, Search } from 'lucide-react'
 import { StatusRail } from '@/components/ui/StatusRail'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -1087,6 +1087,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
   const [containerInputs, setContainerInputs] = useState<Record<string | number, string>>({})
   const [sidebarSupplyId, setSidebarSupplyId] = useState<number | null>(null)
   const [showHiddenLabels, setShowHiddenLabels] = useState(false)
+  const [supplySearch, setSupplySearch] = useState('')
 
   function f(field: keyof NewSupplyForm, val: string | boolean, isEdit = false) {
     if (isEdit) setEditForm(prev => ({ ...prev, [field]: val }))
@@ -1350,6 +1351,27 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
       </>
     )}
 
+    {/* Search box */}
+    {supplyLevels && supplyLevels.length > 0 && (
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(116,116,116,0.45)', pointerEvents: 'none' }} />
+          <input
+            type="search"
+            placeholder="Search supplies…"
+            value={supplySearch}
+            onChange={e => setSupplySearch(e.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 34px', border: '1px solid rgba(216,210,198,0.8)', borderRadius: 10, background: '#fff', color: '#2C2C2C', outline: 'none', ...FONT }}
+          />
+          {supplySearch && (
+            <button onClick={() => setSupplySearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(116,116,116,0.5)', display: 'flex', alignItems: 'center', padding: 2 }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+    )}
+
     {/* Supply stock levels */}
     {supplyLevels && supplyLevels.length > 0 && (
       <div style={{ marginBottom: 32 }}>
@@ -1366,7 +1388,11 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
               </tr>
             </thead>
             <tbody>
-              {supplyLevels.map(sl => {
+              {supplyLevels.filter(sl => {
+                if (!supplySearch.trim()) return true
+                const q = supplySearch.toLowerCase()
+                return sl.name.toLowerCase().includes(q) || (sl.vendor ?? '').toLowerCase().includes(q)
+              }).map(sl => {
                 const inputVal = containerInputs[sl.id] ?? String(sl.containers_on_hand)
                 const isShort = sl.tbsp_needed > 0 && (sl.tbsp_on_hand ?? 0) < sl.tbsp_needed
                 const isLow = !isShort && sl.containers_on_hand < 0.25
