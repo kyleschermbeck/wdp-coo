@@ -379,7 +379,6 @@ export async function syncShopifyData(db: Client): Promise<SyncResult> {
       title = excluded.title,
       handle = excluded.handle,
       status = excluded.status,
-      inventory_quantity = excluded.inventory_quantity,
       inventory_item_id = excluded.inventory_item_id,
       product_id = excluded.product_id,
       raw = excluded.raw,
