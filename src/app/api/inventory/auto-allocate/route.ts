@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
   `, args: [] })).rows as unknown as OrderRow[]
 
   const orderQtys: { orderNumber: number; needed: number }[] = []
-  let totalNeeded = 0
   for (const o of openOrders) {
     let items: LineItem[] = []
     try { items = JSON.parse(o.line_items) } catch { continue }
@@ -46,10 +45,10 @@ export async function POST(req: NextRequest) {
         needed += item.fulfillable_quantity ?? item.quantity ?? 0
       }
     }
-    if (needed > 0) { orderQtys.push({ orderNumber: o.order_number, needed }); totalNeeded += needed }
+    if (needed > 0) orderQtys.push({ orderNumber: o.order_number, needed })
   }
 
-  let available = Math.max(0, totalNeeded + product.inventory_quantity)
+  let available = Math.max(0, product.inventory_quantity)
   await db.execute({ sql: `DELETE FROM pack_assignments WHERE shopify_product_id = ?`, args: [shopify_id] })
   for (const { orderNumber, needed } of orderQtys) {
     const fill = Math.min(needed, available)

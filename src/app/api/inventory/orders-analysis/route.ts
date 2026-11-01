@@ -103,11 +103,11 @@ export async function GET() {
     }
   }
 
-  // FIFO pool: after reset, inventory = -(total needed), so jars packed = total_needed + inventory_qty.
+  // FIFO pool: inventory_quantity IS the absolute jar count on hand.
   const remaining: Record<string, number> = {}
-  for (const [pid, needed] of Object.entries(totalNeededByProduct)) {
+  for (const [pid] of Object.entries(totalNeededByProduct)) {
     const inventoryQty = stockMap[pid] ?? 0
-    remaining[pid] = Math.max(0, needed + inventoryQty)
+    remaining[pid] = Math.max(0, inventoryQty)
   }
 
   // Load stored manual assignments (sum by product+order in case of multiple runs)
@@ -133,7 +133,7 @@ export async function GET() {
         const needed = ei.quantity
         const pid = ei.productId
         const inventoryQty = stockMap[pid] ?? 0
-        const onHand = Math.max(0, (totalNeededByProduct[pid] ?? 0) + inventoryQty)
+        const onHand = Math.max(0, inventoryQty)
 
         const storedAssigned = storedAssignments[pid]?.[order.order_number]
         const avail = remaining[pid] ?? 0

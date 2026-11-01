@@ -285,7 +285,7 @@ function ProductPanel({
   // Shopify two-way sync state
   const [description, setDescription] = useState('')
   const [descOpen, setDescOpen] = useState(false)
-  const [editableQty, setEditableQty] = useState(String(Math.max(0, needed + product.shopify_qty)))
+  const [editableQty, setEditableQty] = useState(String(Math.max(0, product.shopify_qty)))
   const [editablePrice, setEditablePrice] = useState(product.price ? String(product.price) : '')
   const [weightUnit, setWeightUnit] = useState('lb')
   const [variantId, setVariantId] = useState('')
@@ -321,7 +321,7 @@ function ProductPanel({
         }
       } catch { /* skip */ }
     }
-    setEditableQty(String(Math.max(0, needed + product.shopify_qty)))
+    setEditableQty(String(Math.max(0, product.shopify_qty)))
     setEditablePrice(product.price ? String(product.price) : '')
     setProductStatus(product.status)
   }, [product.shopify_id])
@@ -537,7 +537,7 @@ function ProductPanel({
   const shopifyUrl = `https://admin.shopify.com/store/eiy0fe-13/products/${product.shopify_id}`
   const accent = ACCENT_HEX[product.accent_color ?? 'sage'] ?? '#9BAE9A'
   const [restockAt, setRestockAt] = useState(String(product.reorder_threshold ?? ''))
-  const displayQty = isBundle ? bundleQty : Math.max(0, needed + product.shopify_qty)
+  const displayQty = isBundle ? bundleQty : Math.max(0, product.shopify_qty)
   const isLow = displayQty < 2
 
   return (
@@ -735,9 +735,7 @@ function ProductPanel({
                       const newOnHand = parseInt(editableQty) || 0
                       const currentOnHand = displayQty
                       const delta = newOnHand - currentOnHand
-                      // Compute the raw shopify qty that produces this on-hand: shopify_qty = newOnHand - needed
-                      const newShopifyQty = newOnHand - needed
-                      onProductUpdate?.({ shopify_qty: newShopifyQty })
+                      onProductUpdate?.({ shopify_qty: newOnHand })
                       if (delta > 0 && product.inventory_item_id) {
                         // Use log-pack so supply containers are auto-deducted
                         await fetch('/api/inventory/log-pack', {
@@ -750,7 +748,7 @@ function ProductPanel({
                         await fetch('/api/inventory/auto-allocate', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ shopify_id: product.shopify_id, new_qty: newShopifyQty }),
+                          body: JSON.stringify({ shopify_id: product.shopify_id, new_qty: newOnHand }),
                         })
                       }
                       onPackedChange?.()
@@ -2169,7 +2167,7 @@ function ProductCard({ product, displayQty, needed, onClick }: { product: Shopif
   const accent = ACCENT_HEX[product.accent_color ?? 'sage'] ?? '#9BAE9A'
   const shownQty = product.is_bundle
     ? Math.max(0, displayQty)
-    : Math.max(0, needed + product.shopify_qty)
+    : Math.max(0, product.shopify_qty)
   const isShort = needed > 0 && shownQty < needed
   const stockColor = isShort ? '#C94040' : '#3A8A5A'
 
@@ -3252,8 +3250,8 @@ export default function InventoryPage() {
                 {packQueue.rows.map((row) => {
                   const sid = row.shopifyId
                   const product = products.find(p => p.shopify_id === sid)
-                  const inventoryQty = product ? product.shopify_qty : 0
-                  const packed = Math.max(0, row.jars + inventoryQty)
+                  const inventoryQty = product ? Math.max(0, product.shopify_qty) : 0
+                  const packed = inventoryQty
                   const labeled = row.labeledJars ?? 0
                   const toPack = Math.max(0, row.jars - packed)
                   const isPacking = packingFor === sid
