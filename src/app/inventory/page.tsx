@@ -1087,6 +1087,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
   const [editId, setEditId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<NewSupplyForm>(EMPTY_FORM)
   const [containerInputs, setContainerInputs] = useState<Record<string | number, string>>({})
+  const containerSaveTimers = useRef<Record<string | number, ReturnType<typeof setTimeout>>>({})
   const [sidebarSupplyId, setSidebarSupplyId] = useState<number | null>(null)
   const [showHiddenLabels, setShowHiddenLabels] = useState(false)
   const [supplySearch, setSupplySearch] = useState('')
@@ -1216,15 +1217,21 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
   const PANEL_SELECT = { ...SELECT, width: '100%', boxSizing: 'border-box' as const }
   const PANEL_CALC = { ...CALC_INPUT, width: '100%', boxSizing: 'border-box' as const }
 
-  async function saveContainerCount(id: number) {
-    const val = containerInputs[id]
-    if (val == null) return
+  async function saveContainerCount(id: number, valOverride?: string) {
+    const val = valOverride ?? containerInputs[id]
+    if (val == null || val.trim() === '') return
+    clearTimeout(containerSaveTimers.current[id])
     await fetch(`/api/supplies/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ containers_on_hand: parseFloat(val) || 0 }),
+      body: JSON.stringify({ containers_on_hand: parseFloat(val) }),
     })
     onSupplyLevelChange()
+  }
+
+  function scheduleContainerSave(id: number | string, val: string) {
+    clearTimeout(containerSaveTimers.current[id])
+    containerSaveTimers.current[id] = setTimeout(() => saveContainerCount(id as number, val), 800)
   }
 
   return (
@@ -1449,7 +1456,7 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                           min="0"
                           step="0.25"
                           value={inputVal}
-                          onChange={e => setContainerInputs(prev => ({ ...prev, [sl.id]: e.target.value }))}
+                          onChange={e => { setContainerInputs(prev => ({ ...prev, [sl.id]: e.target.value })); scheduleContainerSave(sl.id, e.target.value) }}
                           onBlur={() => saveContainerCount(sl.id)}
                           onKeyDown={e => { if (e.key === 'Enter') saveContainerCount(sl.id) }}
                           className="mob-container-input"
@@ -1905,23 +1912,25 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
                             value={pkgInputVal}
                             onChange={e => setContainerInputs(prev => ({ ...prev, [`pkg_${pl.id}`]: e.target.value }))}
                             onBlur={async () => {
-                              const val = pkgInputVal
-                              if (val == null) return
+                              const val = containerInputs[`pkg_${pl.id}`]
+                              if (val == null || val.trim() === '') return
+                              clearTimeout(containerSaveTimers.current[`pkg_${pl.id}`])
                               await fetch(`/api/supplies/${pl.id}`, {
                                 method: 'PATCH',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ containers_on_hand: parseFloat(val) || 0 }),
+                                body: JSON.stringify({ containers_on_hand: parseFloat(val) }),
                               })
                               onSupplyLevelChange()
                             }}
                             onKeyDown={async e => {
                               if (e.key === 'Enter') {
-                                const val = pkgInputVal
-                                if (val == null) return
+                                const val = containerInputs[`pkg_${pl.id}`]
+                                if (val == null || val.trim() === '') return
+                                clearTimeout(containerSaveTimers.current[`pkg_${pl.id}`])
                                 await fetch(`/api/supplies/${pl.id}`, {
                                   method: 'PATCH',
                                   headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ containers_on_hand: parseFloat(val) || 0 }),
+                                  body: JSON.stringify({ containers_on_hand: parseFloat(val) }),
                                 })
                                 onSupplyLevelChange()
                               }
@@ -2004,10 +2013,13 @@ function SuppliesTab({ supplies, supplyLevels, packagingLevels, labelInventory, 
 
                     const saveLabel = async () => {
                       if (row.supply_id == null) return
+                      const val = containerInputs[inputKey]
+                      if (val == null || val.trim() === '') return
+                      clearTimeout(containerSaveTimers.current[inputKey])
                       await fetch('/api/inventory/label-inventory', {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ shopify_product_id: row.shopify_id, supply_id: row.supply_id, units_on_hand: parseInt(inputVal) || 0 }),
+                        body: JSON.stringify({ shopify_product_id: row.shopify_id, supply_id: row.supply_id, units_on_hand: parseInt(val) }),
                       })
                       onSupplyLevelChange()
                     }
