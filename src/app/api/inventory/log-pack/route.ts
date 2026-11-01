@@ -139,11 +139,52 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Replace order assignments: clear stale entries first so each pack session starts clean
+  // Update order assignments
   if (assignments && assignments.length > 0) {
+    // Explicit assignments from the pack-queue confirm modal — use as-is
     await db.execute({ sql: `DELETE FROM pack_assignments WHERE shopify_product_id = ?`, args: [shopify_id] })
     for (const a of assignments) {
       if (a.qty > 0) await db.execute({ sql: `INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`, args: [shopify_id, a.orderNumber, a.qty] })
+    }
+  } else {
+    // No explicit assignments (e.g. product-tab OH update) — auto-allocate FIFO across open orders
+    const allProductTitles = (await db.execute({ sql: `SELECT shopify_id, title FROM shopify_products`, args: [] })).rows as unknown as { shopify_id: string; title: string }[]
+    const titleToId: Record<string, string> = {}
+    for (const p of allProductTitles) titleToId[p.title] = p.shopify_id
+
+    const openOrders = (await db.execute({ sql: `
+      SELECT order_number, line_items FROM shopify_orders
+      WHERE fulfillment_status IS NULL OR fulfillment_status IN ('unfulfilled','partial')
+      ORDER BY created_at ASC
+    `, args: [] })).rows as unknown as { order_number: number; line_items: string }[]
+
+    const orderQtys: { orderNumber: number; needed: number }[] = []
+    let totalNeeded = 0
+    for (const o of openOrders) {
+      let items: { product_id: number; fulfillable_quantity: number; quantity: number; properties?: { name: string; value: string }[] }[] = []
+      try { items = JSON.parse(o.line_items) } catch { continue }
+      let needed = 0
+      for (const item of items) {
+        const hasBundleProps = item.properties?.some(p => !p.name.startsWith('_'))
+        if (hasBundleProps && item.properties) {
+          for (const prop of item.properties) {
+            if (prop.name.startsWith('_')) continue
+            if (titleToId[prop.name] === shopify_id) needed += parseInt(prop.value) || 0
+          }
+        } else if (String(item.product_id) === shopify_id) {
+          needed += item.fulfillable_quantity ?? item.quantity ?? 0
+        }
+      }
+      if (needed > 0) { orderQtys.push({ orderNumber: o.order_number, needed }); totalNeeded += needed }
+    }
+
+    let available = Math.max(0, totalNeeded + newQty)
+    await db.execute({ sql: `DELETE FROM pack_assignments WHERE shopify_product_id = ?`, args: [shopify_id] })
+    for (const { orderNumber, needed } of orderQtys) {
+      const fill = Math.min(needed, available)
+      if (fill > 0) await db.execute({ sql: `INSERT INTO pack_assignments (shopify_product_id, order_number, qty) VALUES (?, ?, ?)`, args: [shopify_id, orderNumber, fill] })
+      available -= fill
+      if (available <= 0) break
     }
   }
 

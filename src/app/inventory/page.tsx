@@ -746,8 +746,12 @@ function ProductPanel({
                           body: JSON.stringify({ shopify_id: product.shopify_id, qty: delta }),
                         })
                       } else if (delta !== 0) {
-                        // Correction downward — just update Shopify qty directly
-                        patchShopify({ inventory_qty: newShopifyQty, inventory_item_id: product.inventory_item_id })
+                        // Correction — write new qty to DB and re-run FIFO allocation atomically
+                        await fetch('/api/inventory/auto-allocate', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ shopify_id: product.shopify_id, new_qty: newShopifyQty }),
+                        })
                       }
                       onPackedChange?.()
                     }}
