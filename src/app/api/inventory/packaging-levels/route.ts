@@ -72,9 +72,8 @@ export async function GET() {
   const jarsToPack: Record<string, number> = {}
   for (const [pid, needed] of Object.entries(jarsNeeded)) {
     const inventoryQty = stockMap[pid] ?? 0
-    const onHand = Math.max(0, needed + inventoryQty)
     const labeled = labeledJarsMap[pid] ?? 0
-    jarsToPack[pid] = Math.max(0, needed - onHand - labeled)
+    jarsToPack[pid] = Math.max(0, needed - inventoryQty - labeled)
   }
 
   // Units needed per packaging supply = sum of jars_to_pack for products using it

@@ -70,12 +70,11 @@ export async function GET() {
   const stockMap: Record<string, number> = {}
   for (const p of products) stockMap[p.shopify_id] = p.inventory_quantity
 
-  // jars still to pack = max(0, needed - on_hand); labeled jars are in-progress, not done
+  // jars still to pack = max(0, needed - on_hand); inventoryQty IS the absolute jar count
   const jarsToPack: Record<string, number> = {}
   for (const [pid, needed] of Object.entries(jarsNeeded)) {
     const inventoryQty = stockMap[pid] ?? 0
-    const onHand = Math.max(0, needed + inventoryQty)
-    jarsToPack[pid] = Math.max(0, needed - onHand)
+    jarsToPack[pid] = Math.max(0, needed - inventoryQty)
   }
 
   // Labeled jars beyond order need are backstock — they'll still be filled, so count their supplies
