@@ -1937,7 +1937,7 @@ export default function ChatPage() {
   // briefHidden kept for legacy clear-chat reset; showBriefInFeed removed — brief now lives only in right panel
 
   return (
-    <div className="flex h-full overflow-hidden" style={{ background: 'var(--wdp-ground, #FFFFFF)' }}>
+    <div className="flex overflow-hidden" style={{ height: '100%', background: 'var(--wdp-ground, #FFFFFF)' }}>
 
       {/* ── Left nav rail ────────────────────────────────────────────────── */}
       <nav
@@ -2350,7 +2350,7 @@ export default function ChatPage() {
               }}
             />
 
-            <div style={{
+            <div className="hidden md:block" style={{
               fontFamily: FONT, fontSize: 10, color: 'var(--wdp-ink-dim)',
               background: 'var(--wdp-surface)', border: '1px solid var(--wdp-border)',
               borderRadius: 4, padding: '2px 5px', letterSpacing: '0.05em', flexShrink: 0,

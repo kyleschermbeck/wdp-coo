@@ -12,7 +12,8 @@ export function ConditionalShell({ children }: { children: React.ReactNode }) {
   if (isChat) {
     return (
       <>
-        <main className="flex-1 h-full overflow-hidden">
+        {/* Use 100dvh so iOS keyboard shrinks the layout and keeps compose bar visible */}
+        <main className="flex-1 overflow-hidden" style={{ height: '100dvh' }}>
           {children}
         </main>
         {/* Bottom nav still accessible from chat on mobile */}
