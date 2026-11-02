@@ -494,9 +494,18 @@ export default function TasksPage() {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, notes } : t))
   }
 
-  const visible = tasks.filter(t => filter === 'all' || t.status === filter)
-  const active  = visible.filter(t => t.status !== 'done')
-  const done    = visible.filter(t => t.status === 'done')
+  const byDate = (a: Task, b: Task) => {
+    if (!a.due_date && !b.due_date) return 0
+    if (!a.due_date) return 1
+    if (!b.due_date) return -1
+    return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
+  }
+
+  const visible    = tasks.filter(t => filter === 'all' || t.status === filter)
+  const active     = visible.filter(t => t.status !== 'done')
+  const urgent     = active.filter(t => t.priority === 'urgent').sort(byDate)
+  const nonUrgent  = active.filter(t => t.priority !== 'urgent').sort(byDate)
+  const done       = visible.filter(t => t.status === 'done')
   const activeCount = tasks.filter(t => t.status !== 'done').length
 
   return (
@@ -552,12 +561,39 @@ export default function TasksPage() {
             <Overdue tasks={tasks} />
 
             <div ref={listRef} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {active.map((t, i) => (
+              {urgent.length > 0 && (
+                <>
+                  <p style={{ fontFamily: FONT, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C14B3A', marginBottom: 2, marginTop: 2 }}>
+                    Urgent · {urgent.length}
+                  </p>
+                  {urgent.map((t, i) => (
+                    <div key={t.id} data-task-card>
+                      <TaskCard
+                        task={t} index={i}
+                        isDragging={dragIndex === i}
+                        isDragOver={dragOver === i}
+                        onToggle={handleToggle}
+                        onDelete={handleDelete}
+                        onEdit={handleEdit}
+                        onUpdateNotes={handleUpdateNotes}
+                        onDragStart={handleDragStart}
+                        onDragOver={handleDragOver}
+                        onDragEnd={handleDragEnd}
+                        onTouchStart={handleTouchStart}
+                      />
+                    </div>
+                  ))}
+                  {nonUrgent.length > 0 && (
+                    <div style={{ height: 1, background: 'var(--wdp-border)', margin: '10px 0 6px' }} />
+                  )}
+                </>
+              )}
+              {nonUrgent.map((t, i) => (
                 <div key={t.id} data-task-card>
                   <TaskCard
-                    task={t} index={i}
-                    isDragging={dragIndex === i}
-                    isDragOver={dragOver === i}
+                    task={t} index={urgent.length + i}
+                    isDragging={dragIndex === urgent.length + i}
+                    isDragOver={dragOver === urgent.length + i}
                     onToggle={handleToggle}
                     onDelete={handleDelete}
                     onEdit={handleEdit}
