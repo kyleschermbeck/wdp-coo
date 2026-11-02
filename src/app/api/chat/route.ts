@@ -997,7 +997,8 @@ ${upcomingLines.length > 0
 
   const model = agent?.model || 'claude-sonnet-4-6'
   const apiKey = getApiKey()
-  const client = new Anthropic({ apiKey })
+  // Only pass apiKey if resolved — passing undefined explicitly throws in some SDK versions
+  const client = new Anthropic(apiKey ? { apiKey } : {})
   const encoder = new TextEncoder()
 
   const readable = new ReadableStream({
