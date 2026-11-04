@@ -23,6 +23,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     // Update local cache
     await db.execute({sql: `UPDATE shopify_orders SET fulfillment_status = 'fulfilled' WHERE shopify_id = ?`, args: [id]})
 
+    // Decrement local on-hand inventory for each line item
+    const orderRow = (await db.execute({sql: `SELECT line_items FROM shopify_orders WHERE shopify_id = ?`, args: [id]})).rows[0] as unknown as { line_items: string } | undefined
+    if (orderRow?.line_items) {
+      const lineItems = JSON.parse(orderRow.line_items) as Array<{ product_id: number | null; quantity: number }>
+      for (const item of lineItems) {
+        if (!item.product_id) continue
+        await db.execute({
+          sql: `UPDATE shopify_products SET inventory_quantity = MAX(0, inventory_quantity - ?) WHERE shopify_id = ?`,
+          args: [item.quantity, String(item.product_id)],
+        })
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
