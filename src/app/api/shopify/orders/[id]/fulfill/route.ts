@@ -21,7 +21,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     await fulfillOrder(config, parseInt(id), locationId.shopify_id)
 
     // Update local cache
-    await db.execute({sql: `UPDATE shopify_orders SET fulfillment_status = 'fulfilled' WHERE shopify_id = ?`, args: [id]})
+    await db.execute({sql: `UPDATE shopify_orders SET fulfillment_status = 'fulfilled', inventory_deducted = 1 WHERE shopify_id = ?`, args: [id]})
 
     // Decrement local on-hand inventory for each line item
     const orderRow = (await db.execute({sql: `SELECT line_items FROM shopify_orders WHERE shopify_id = ?`, args: [id]})).rows[0] as unknown as { line_items: string } | undefined

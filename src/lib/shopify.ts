@@ -318,6 +318,9 @@ export async function syncShopifyData(db: Client): Promise<SyncResult> {
   const config = await getShopifyConfig(db)
   if (!config) throw new Error('Shopify not configured')
 
+  // Ensure inventory_deducted column exists (safe no-op if already present)
+  try { await db.execute({ sql: `ALTER TABLE shopify_orders ADD COLUMN inventory_deducted INTEGER NOT NULL DEFAULT 0`, args: [] }) } catch { /* already exists */ }
+
   // ── Orders (90 days) — graceful if read_all_orders scope is missing ──
   let ordersCount = 0
   try {
@@ -360,6 +363,27 @@ export async function syncShopifyData(db: Client): Promise<SyncResult> {
         o.financial_status, o.fulfillment_status ?? null,
         JSON.stringify(o.line_items), o.created_at, o.processed_at ?? null,
       ]})
+
+      // Decrement OH for newly-fulfilled orders (idempotent via inventory_deducted flag)
+      if (o.fulfillment_status === 'fulfilled') {
+        const row = (await db.execute({
+          sql: `SELECT inventory_deducted FROM shopify_orders WHERE shopify_id = ?`,
+          args: [String(o.id)],
+        })).rows[0] as unknown as { inventory_deducted: number } | undefined
+        if (row && !row.inventory_deducted) {
+          for (const item of o.line_items) {
+            if (!item.product_id) continue
+            await db.execute({
+              sql: `UPDATE shopify_products SET inventory_quantity = MAX(0, inventory_quantity - ?) WHERE shopify_id = ?`,
+              args: [item.quantity, String(item.product_id)],
+            })
+          }
+          await db.execute({
+            sql: `UPDATE shopify_orders SET inventory_deducted = 1 WHERE shopify_id = ?`,
+            args: [String(o.id)],
+          })
+        }
+      }
     }
     ordersCount = orders.length
   } catch (err) {
