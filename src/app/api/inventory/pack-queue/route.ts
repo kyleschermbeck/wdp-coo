@@ -57,6 +57,23 @@ export async function GET() {
   const titleToShopifyId: Record<string, string> = {}
   for (const p of allProducts) titleToShopifyId[p.title] = p.shopify_id
 
+  // Load bundle component definitions: bundleShopifyId → [{component_shopify_id, quantity}]
+  interface BundleComponentRow { bundle_shopify_id: string; component_shopify_id: string; quantity: number; component_title: string }
+  const bundleComponentRows = (await db.execute({sql: `
+    SELECT pbc.bundle_shopify_id, pbc.component_shopify_id, pbc.quantity, sp.title AS component_title
+    FROM product_bundle_components pbc
+    JOIN shopify_products sp ON sp.shopify_id = pbc.component_shopify_id
+  `, args: []})).rows as unknown as BundleComponentRow[]
+
+  const bundleComponentsMap: Record<string, { shopifyId: string; title: string; quantity: number }[]> = {}
+  for (const r of bundleComponentRows) {
+    if (!bundleComponentsMap[r.bundle_shopify_id]) bundleComponentsMap[r.bundle_shopify_id] = []
+    bundleComponentsMap[r.bundle_shopify_id].push({ shopifyId: r.component_shopify_id, title: r.component_title, quantity: r.quantity })
+  }
+
+  // Set of bundle shopify_ids for quick lookup
+  const bundleIds = new Set(Object.keys(bundleComponentsMap))
+
   // Aggregate per blend, tracking per-order breakdown (oldest first from query)
   const byBlend: Record<string, {
     jars: number
@@ -101,6 +118,16 @@ export async function GET() {
           addToBlend(prop.name, sid, 0, propQty, order.order_number, order.created_at)
         }
         continue // don't add the bundle line item itself
+      }
+
+      // Fixed bundle product — expand into component jars
+      const itemShopifyId = String(item.product_id)
+      if (bundleIds.has(itemShopifyId)) {
+        const components = bundleComponentsMap[itemShopifyId]
+        for (const comp of components) {
+          addToBlend(comp.title, comp.shopifyId, 0, comp.quantity * qty, order.order_number, order.created_at)
+        }
+        continue
       }
 
       // Regular product
