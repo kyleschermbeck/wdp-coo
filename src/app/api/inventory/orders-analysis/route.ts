@@ -84,9 +84,16 @@ export async function GET() {
     bundleCompMap[r.bundle_shopify_id].push({ shopifyId: r.component_shopify_id, title: r.component_title, quantity: r.quantity })
   }
 
-  // Expand a raw line items array, breaking out bundle items into individual products
+  // Expand a raw line items array, merging duplicate productIds into a single row
   function expandItems(rawItems: LineItem[]): ExpandedItem[] {
-    const out: ExpandedItem[] = []
+    const map: Record<string, ExpandedItem> = {}
+    function add(entry: ExpandedItem) {
+      if (map[entry.productId]) {
+        map[entry.productId].quantity += entry.quantity
+      } else {
+        map[entry.productId] = { ...entry }
+      }
+    }
     for (const item of rawItems) {
       const qty = item.fulfillable_quantity ?? item.quantity ?? 0
       if (!qty) continue
@@ -98,18 +105,18 @@ export async function GET() {
           const propQty = parseInt(prop.value)
           if (!propQty) continue
           const sid = titleToId[prop.name] ?? ''
-          out.push({ title: prop.name, variantTitle: null, sku: '', price: item.price, quantity: propQty, productId: sid, fromBundle: true })
+          add({ title: prop.name, variantTitle: null, sku: '', price: item.price, quantity: propQty, productId: sid, fromBundle: true })
         }
       } else if (bundleCompMap[String(item.product_id)]) {
         // Fixed bundle product: expand into its defined components
         for (const comp of bundleCompMap[String(item.product_id)]) {
-          out.push({ title: comp.title, variantTitle: null, sku: '', price: item.price, quantity: comp.quantity * qty, productId: comp.shopifyId, fromBundle: true })
+          add({ title: comp.title, variantTitle: null, sku: '', price: item.price, quantity: comp.quantity * qty, productId: comp.shopifyId, fromBundle: true })
         }
       } else {
-        out.push({ title: item.title, variantTitle: item.variant_title, sku: item.sku, price: item.price, quantity: qty, productId: String(item.product_id), fromBundle: false })
+        add({ title: item.title, variantTitle: item.variant_title, sku: item.sku, price: item.price, quantity: qty, productId: String(item.product_id), fromBundle: false })
       }
     }
-    return out
+    return Object.values(map)
   }
 
   // First pass: total fulfillable jars needed per product across all orders
