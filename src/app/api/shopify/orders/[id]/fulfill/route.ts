@@ -24,15 +24,35 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     await db.execute({sql: `UPDATE shopify_orders SET fulfillment_status = 'fulfilled', inventory_deducted = 1 WHERE shopify_id = ?`, args: [id]})
 
     // Decrement local on-hand inventory for each line item
+    // For fixed bundle products, decrement components instead of the bundle itself
     const orderRow = (await db.execute({sql: `SELECT line_items FROM shopify_orders WHERE shopify_id = ?`, args: [id]})).rows[0] as unknown as { line_items: string } | undefined
     if (orderRow?.line_items) {
-      const lineItems = JSON.parse(orderRow.line_items) as Array<{ product_id: number | null; quantity: number }>
+      interface FulfillLineItem { product_id: number | null; quantity: number; fulfillable_quantity?: number }
+      interface BundleComp { component_shopify_id: string; quantity: number }
+      const lineItems = JSON.parse(orderRow.line_items) as FulfillLineItem[]
       for (const item of lineItems) {
         if (!item.product_id) continue
-        await db.execute({
-          sql: `UPDATE shopify_products SET inventory_quantity = MAX(0, inventory_quantity - ?) WHERE shopify_id = ?`,
-          args: [item.quantity, String(item.product_id)],
-        })
+        const qty = item.fulfillable_quantity ?? item.quantity ?? 0
+        if (!qty) continue
+        const sid = String(item.product_id)
+        // Check if this is a fixed bundle with defined components
+        const components = (await db.execute({
+          sql: `SELECT component_shopify_id, quantity FROM product_bundle_components WHERE bundle_shopify_id = ?`,
+          args: [sid],
+        })).rows as unknown as BundleComp[]
+        if (components.length > 0) {
+          for (const comp of components) {
+            await db.execute({
+              sql: `UPDATE shopify_products SET inventory_quantity = MAX(0, inventory_quantity - ?) WHERE shopify_id = ?`,
+              args: [comp.quantity * qty, comp.component_shopify_id],
+            })
+          }
+        } else {
+          await db.execute({
+            sql: `UPDATE shopify_products SET inventory_quantity = MAX(0, inventory_quantity - ?) WHERE shopify_id = ?`,
+            args: [qty, sid],
+          })
+        }
       }
     }
 

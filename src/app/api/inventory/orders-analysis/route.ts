@@ -71,6 +71,19 @@ export async function GET() {
     titleToId[p.title] = p.shopify_id
   }
 
+  // Load fixed bundle component definitions
+  interface BundleCompRow { bundle_shopify_id: string; component_shopify_id: string; quantity: number; component_title: string }
+  const bundleCompRows = (await db.execute({sql: `
+    SELECT pbc.bundle_shopify_id, pbc.component_shopify_id, pbc.quantity, sp.title AS component_title
+    FROM product_bundle_components pbc
+    JOIN shopify_products sp ON sp.shopify_id = pbc.component_shopify_id
+  `, args: []})).rows as unknown as BundleCompRow[]
+  const bundleCompMap: Record<string, { shopifyId: string; title: string; quantity: number }[]> = {}
+  for (const r of bundleCompRows) {
+    if (!bundleCompMap[r.bundle_shopify_id]) bundleCompMap[r.bundle_shopify_id] = []
+    bundleCompMap[r.bundle_shopify_id].push({ shopifyId: r.component_shopify_id, title: r.component_title, quantity: r.quantity })
+  }
+
   // Expand a raw line items array, breaking out bundle items into individual products
   function expandItems(rawItems: LineItem[]): ExpandedItem[] {
     const out: ExpandedItem[] = []
@@ -79,12 +92,18 @@ export async function GET() {
       if (!qty) continue
       const hasBundleProps = item.properties?.some(p => !p.name.startsWith('_'))
       if (hasBundleProps && item.properties) {
+        // Build-A-Bundle style: components listed as line item properties
         for (const prop of item.properties) {
           if (prop.name.startsWith('_')) continue
           const propQty = parseInt(prop.value)
           if (!propQty) continue
           const sid = titleToId[prop.name] ?? ''
           out.push({ title: prop.name, variantTitle: null, sku: '', price: item.price, quantity: propQty, productId: sid, fromBundle: true })
+        }
+      } else if (bundleCompMap[String(item.product_id)]) {
+        // Fixed bundle product: expand into its defined components
+        for (const comp of bundleCompMap[String(item.product_id)]) {
+          out.push({ title: comp.title, variantTitle: null, sku: '', price: item.price, quantity: comp.quantity * qty, productId: comp.shopifyId, fromBundle: true })
         }
       } else {
         out.push({ title: item.title, variantTitle: item.variant_title, sku: item.sku, price: item.price, quantity: qty, productId: String(item.product_id), fromBundle: false })
